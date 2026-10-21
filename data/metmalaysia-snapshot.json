@@ -1,0 +1,106 @@
+{
+  "mode": "snapshot",
+  "retrievedAt": "2026-10-21T15:38:04.595Z",
+  "source": "MET Malaysia via data.gov.my",
+  "sourceUrl": "https://api.data.gov.my/weather/forecast?contains=Ds057@location__location_id&limit=7",
+  "records": [
+    {
+      "location": {
+        "location_id": "Ds057",
+        "location_name": "Petaling"
+      },
+      "date": "2026-10-27",
+      "morning_forecast": "Tiada Hujan",
+      "afternoon_forecast": "Ribut petir di beberapa tempat",
+      "night_forecast": "Tiada Hujan",
+      "summary_forecast": "Ribut petir di beberapa tempat",
+      "summary_when": "Petang",
+      "min_temp": 24,
+      "max_temp": 33
+    },
+    {
+      "location": {
+        "location_id": "Ds057",
+        "location_name": "Petaling"
+      },
+      "date": "2026-10-26",
+      "morning_forecast": "Tiada Hujan",
+      "afternoon_forecast": "Tiada Hujan",
+      "night_forecast": "Tiada Hujan",
+      "summary_forecast": "Tiada Hujan",
+      "summary_when": "Sepanjang Hari",
+      "min_temp": 24,
+      "max_temp": 33
+    },
+    {
+      "location": {
+        "location_id": "Ds057",
+        "location_name": "Petaling"
+      },
+      "date": "2026-10-25",
+      "morning_forecast": "Hujan di beberapa tempat",
+      "afternoon_forecast": "Ribut petir di beberapa tempat",
+      "night_forecast": "Hujan di beberapa tempat",
+      "summary_forecast": "Ribut petir di beberapa tempat",
+      "summary_when": "Sepanjang Hari",
+      "min_temp": 24,
+      "max_temp": 33
+    },
+    {
+      "location": {
+        "location_id": "Ds057",
+        "location_name": "Petaling"
+      },
+      "date": "2026-10-24",
+      "morning_forecast": "Tiada Hujan",
+      "afternoon_forecast": "Ribut petir di beberapa tempat",
+      "night_forecast": "Hujan di beberapa tempat",
+      "summary_forecast": "Ribut petir di beberapa tempat",
+      "summary_when": "Petang dan Malam",
+      "min_temp": 24,
+      "max_temp": 33
+    },
+    {
+      "location": {
+        "location_id": "Ds057",
+        "location_name": "Petaling"
+      },
+      "date": "2026-10-23",
+      "morning_forecast": "Jerebu",
+      "afternoon_forecast": "Ribut petir di beberapa tempat",
+      "night_forecast": "Jerebu",
+      "summary_forecast": "Ribut petir di beberapa tempat",
+      "summary_when": "Sepanjang Hari",
+      "min_temp": 24,
+      "max_temp": 33
+    },
+    {
+      "location": {
+        "location_id": "Ds057",
+        "location_name": "Petaling"
+      },
+      "date": "2026-10-22",
+      "morning_forecast": "Jerebu",
+      "afternoon_forecast": "Ribut petir di beberapa tempat",
+      "night_forecast": "Jerebu",
+      "summary_forecast": "Ribut petir di beberapa tempat",
+      "summary_when": "Sepanjang Hari",
+      "min_temp": 25,
+      "max_temp": 34
+    },
+    {
+      "location": {
+        "location_id": "Ds057",
+        "location_name": "Petaling"
+      },
+      "date": "2026-10-21",
+      "morning_forecast": "Jerebu",
+      "afternoon_forecast": "Ribut petir di beberapa tempat",
+      "night_forecast": "Hujan di beberapa tempat",
+      "summary_forecast": "Ribut petir di beberapa tempat",
+      "summary_when": "Sepanjang Hari",
+      "min_temp": 25,
+      "max_temp": 34
+    }
+  ]
+}
