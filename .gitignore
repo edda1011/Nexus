@@ -147,3 +147,9 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Private NEXUS database, credentials and signing identity
+.nexus/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

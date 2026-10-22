@@ -1,94 +1,87 @@
-# NEXUS Studio
+# NEXUS Studio · v0.5
 
 Resource intelligence. Connected action.
 
-A local, interactive prototype for the Sime Darby Property hackathon. One Water + BioLoop intervention connects rainwater, existing processed mulch, facilities work and a resident replenishment mission. Seri Murni is a fictional demonstration community; the map is a schematic, not actual property geography.
+An interactive hackathon prototype connecting Water + BioLoop, Energy scheduling and bounded RideShare missions through Sense → Optimise → Mobilise → Verify. Seri Murni is a fictional community. Public weather is real model data; site assumptions and demo outcomes remain explicitly labelled.
 
-## Run in VS Code
+## Start in VS Code
 
-Requires Node.js 20+. Open this repository folder in VS Code, then Terminal → New Terminal:
+Requires **Node.js 24+**, including built-in SQLite. Check `node --version`. No npm install or external database setup is needed. Stop any older prototype terminal with Ctrl+C, then:
 
 ```powershell
+cd C:\Users\eddac\source\repos\Nexus
 npm.cmd start
 ```
 
-Open http://localhost:5173. No npm install, API key or database setup is needed. Keep the terminal running; Ctrl+C stops it. If an earlier prototype is running, stop it and restart so the new weather endpoint is available. Use `npm.cmd test` for the engine/data checks.
+Open http://localhost:5173. Keep that terminal running. In a second terminal:
 
-## Readability and comparison controls (v0.4)
+```powershell
+npm.cmd run accounts
+```
 
-The product navigation no longer includes Identity and `/brand.html` returns 404; the original SVG logo assets remain in the repository. Manrope remains the interface family, with a 16px root/body, 14px desktop navigation and larger headings and captions. Mobile scenario choices use two columns, and the header reserves space for search and weather.
+This prints the different random passwords generated at first startup. Sign in through **Connections & audit**. Keep `.nexus/` private: it contains credentials, the device token, database and signing key; Git ignores it. Guest demo requires no sign-in and uses separate browser storage.
 
-Action studio adds Max reuse, No mulch effect, Dedicated delivery and Restore plan defaults. They use the existing constraint/cost engine and append an assumption-change event; approval locks them. Defaults restore plan parameters without clearing history or the operator note. Copy plan summary includes the assumption and simulation disclosures, with selectable text if clipboard access is denied. Overview adds previous/next/day-zero controls and an interruptible focus-on-map camera move. Evidence filters distinguish public references from site assumptions.
+| Account | Server permissions |
+| --- | --- |
+| manager | Edit/approve plans, review outcomes and supplied site evidence. |
+| staff | Record work, nursery weights/processing and Energy execution; import readings. |
+| driver / rider | Separate resident participants; own bookings/check-ins/trip attestations. |
+| auditor | Read-only workspace and signed export. |
 
-## Live data and action animation (v0.3)
+## Implemented modules
 
-The app now opens in **Live outlook**, connected to [Open-Meteo's forecast API](https://open-meteo.com/en/docs) for Shah Alam. It requests actual current-model temperature, humidity, precipitation, weather code, wind, hourly numeric precipitation/chance, and fourteen daily rainfall/FAO ET₀ forecasts. No API key is needed for this non-commercial prototype. Modelled current conditions are not an on-site weather-station feed; outside native 15-minute regions they use interpolated hourly weather-model data.
+- **Opportunity queue:** four computed candidates; physical constraints before 50/30/20 impact/cost/evidence scoring, mutually exclusive Water delivery alternatives and recorded-workflow status. A labelled seven-day fixture demonstrates the proposal's +25 m³ anomaly.
+- **Evidence readiness:** each input has value, unit, source, time, freshness and weight. This is a transparent rules index, not calibrated statistical confidence.
+- **Water + BioLoop:** four connected views, Live outlook, seasonal, explicit Dry spell +30%, dry reference and storm stress test; additional pilot costs, inventory constraints, human approval, work orders, simulated QR/check-in, staff-confirmed once-only credits, processing and outcome reconciliation.
+- **Energy:** 24-hour public irradiance → assumed PV model, flexible equipment/window/grid-limit checks, interactive hourly chart, frozen approved schedule, staff attestation and synthetic or supplied billing-cycle outcomes. Scheduling only; no electricity rewiring, trading or CREAM settlement.
+- **RideShare:** declared school/office or current forecast-rain trigger, bounded time window, consent, separate driver/passenger and two attestations before once-only demo credits. One-pair pilot workflow; self-attestation is not GPS or independent travel verification.
+- **Server and connections:** account/role/CSRF checks, revision conflicts, transactional SQLite records/credits, signed audit, CSV and provider-token ingestion, reviewed tank/quality/route references and offline export verification. Missing devices remain missing.
+- **UI:** forest identity, local Manrope and readable text; resource/approval/collection motion, chart controls, drafts/filters, keyboard/reduced-motion support and native mobile module selector. Identity page remains removed; source SVGs remain.
 
-- The visible app polls `/api/live-weather` every 60 seconds. The local server shares a 60-second cache and a single in-flight request, with a 6.5-second upstream timeout. Numbers change only when the source changes; polling never fabricates movement.
-- The main weather panel shows the source time, retrieval time and connection status. Missing/invalid data is rejected. Failure retains the last successful values, labels them **last known**, and blocks new live approvals. With no previous data, the server returns 503 and the model waits. The client fetch has a nine-second timeout. Returning to a hidden tab triggers a new check.
-- Live outlook uses the forecast's numeric rain and ET₀ in the irrigation model. The map balance, allocation cap, sensitivity, economics and calculation receipt use that same captured forecast. Historical scenarios remain independent.
-- A pending plan adopts changed forecasts after field editing ends. Approval freezes the exact forecast, source time and retrieval time for that plan. New weather cannot rewrite its costs, reservations or result baseline. Export includes both the current public feed and the plan's captured reference.
-- Tank A, the water meter, stock, quality receipts and post-intervention readings remain **unconnected / simulated**. A real device feed needs its provider endpoint, access details and server-side accounting. The app does not manufacture IoT readings.
+## Demonstration
 
-Try **Live outlook → Review live plan**. Inspect the source, change allocation/cost assumptions and approve the demo. Approval draws the water → work → community connection; transfer completion animates the tank's actual before/after *simulation* balance; mulch completion covers the beds; staff weighing moves credits toward the wallet; reconciliation reveals the linked accounting result. Each action updates state immediately; animation does not create an artificial processing delay. The result card can be dismissed and mobilisation can be replayed without creating another action. Reduced-motion preferences preserve the result text without spatial animation. Routes pause when hidden/offscreen.
+Stay in Demo sandbox → Dry reference → Action studio. Compare Shared/Dedicated delivery and costs, inspect the receipt, approve. Community → book → simulated QR check-in. Check-in awards nothing; staff weighing awards once. Record processing after its declared model interval, complete all three work orders, then Impact ledger → load synthetic outcomes and export.
 
-Current weather may produce low demand or negative net benefit. Keep that result visible; the historical Dry reference remains the repeatable teaching/demo case. Its fixed numbers below are not a claim about today's weather.
+Dry fixture: 277.59 m³ modelled 14-day demand, 41.85 m³ potential potable avoidance, RM 20.29 net on a shared run. Synthetic reconciliation: 3.33 m³ reduced demand + 36 m³ substitution = 39.33 m³ potable avoidance. These are model/fixture values, not measured savings or mulch causality. The current intervention uses 1,500 kg already processed mulch; new collection replenishes a later cycle.
 
-## What is real, derived, or simulated?
+Energy → change PV/tariff/load choices → save/recalculate → inspect an hour → approve → staff execution → synthetic 30-day cycle. RideShare → current 90-minute test window → save → approve → consent → demo driver offers → different demo passenger joins → separately confirm both. Credits appear only after the second confirmation.
 
-| Input | Evidence class | Implementation |
-| --- | --- | --- |
-| Shah Alam live weather + numeric forecast | Updating public model API | Open-Meteo through `/api/live-weather`; drives Live outlook with original source / retrieval times. |
-| Petaling district forecast | Official public forecast | MET Malaysia via data.gov.my, refreshed through `/api/weather`; original validity dates and retrieval time retained. Saved fallback is visibly labelled. |
-| Rainfall and reference evapotranspiration | Public gridded reanalysis | Open-Meteo / ERA5, 1–14 July 2025, Shah Alam vicinity. Retained daily records; not a local gauge or live sensor. |
-| Non-domestic water tariff | Published tariff | Air Selangor schedule effective 1 September 2025; hypothetical meter category is an assumption. |
-| Irrigation demand | Derived site model | Public climate inputs plus explicit area, Kc, efficiency and effective-rain assumptions. |
-| Tanks, nursery stock, routes, receipts and budgets | Site assumptions | Fictional assets with declared constraints, ready-stock accounting and cost sensitivity. |
-| Residents, staff, work completion and outcome readings | Simulation | No personal data, real dispatch, field verification or cash rewards. |
+For real server permissions, manager approves, staff executes, manager reconciles. In RideShare, use the two resident accounts separately. Connections can import `samples/synthetic-water-week.csv` with **Synthetic / simulated** selected and a unique ID; its historical timestamps remain historical.
 
-The dry reference uses the retained climate values: 11.20 mm rain and 67.63 mm ET₀ across the fortnight. The other two scenarios are transparent stress transformations, not observed seasons: Seasonal baseline uses rainfall ×2.2 and ET₀ ×0.90; Storm stress-test uses rainfall ×8 and ET₀ ×0.82. MET district descriptions remain context only. Live outlook uses a separate numeric Open-Meteo forecast; the three historical scenarios retain their reference window. A thunderstorm description is never converted into invented rainfall millimetres.
+Keyboard: Ctrl/Cmd+K search; 1–4 Water views outside fields; map pan/zoom and arrow keys. Mobile uses bottom Water navigation and the module selector.
 
-## Five-minute demonstration
+## Live data and evidence
 
-1. Choose **Dry reference** for this repeatable walkthrough. **Overview:** select the three assets, pan/zoom the schematic map, change resource layers and scrub/play the 14-day model timeline. Playback previews a model; it does not finish work or create verified savings. The source button opens the evidence registry.
-2. **Action studio:** change allocation, the 0–15% mulch sensitivity and delivery arrangement. Default dry reference: 277.59 m³ modelled irrigation, 41.85 m³ potential potable avoidance, RM 20.29 estimated net benefit. Dedicated delivery changes net benefit to −RM 99.71. Open Calculation receipt and constraints before approving.
-3. **Community:** approval opens the local mission. Book a drop-off and simulate QR check-in for 20.1 kg. No credits appear yet. Return to the staff collection desk and confirm the weight: 60 demo credits are issued once.
-4. **Action studio:** simulate 11.05 kg accepted processed output after seven model days. Complete all three work orders. The pilot uses 1,500 kg of existing processed mulch; the new contribution replenishes a future cycle.
-5. **Impact ledger:** load the 14-day synthetic result. Default dry: 3.33 m³ less total demand + 36 m³ rainwater substitution = 39.33 m³ potable avoidance. This demonstrates reconciliation, not a measured site saving or proof of mulch causality. Export evidence JSON with public inputs, assumptions and the event trail.
-6. **Storm stress-test:** missing quality evidence blocks approval. Reset clears the current scenario only. Cancellation is possible before work/collection starts; simulated failure preserves the trail and credits while releasing the remaining reservation.
+[Open-Meteo](https://open-meteo.com/en/docs) provides Shah Alam current-model weather, hourly precipitation/chance/shortwave radiation and 14 daily rainfall/FAO ET₀ forecasts. Visible clients poll every minute; server cache is one minute, upstream timeout 6.5 seconds. Source/retrieval times remain separate. Failure labels last-known values and blocks new live approvals. Drafts follow changed sources; approval freezes inputs. Next-day irradiance is averaged over the preceding hour, converted to assumed PV yield, not measured production.
 
-Keyboard: Ctrl/Cmd+K searches views, assets and evidence; 1–4 changes views outside fields; the focused map supports arrow-key panning. Mobile uses bottom navigation and a resource detail sheet. Reduced-motion preferences disable transitions and numeric animation.
+MET Malaysia/data.gov.my supplies district context with a ten-minute cache and dated fallback. Text descriptions never become invented rainfall. Retained July 2025 ERA5 reanalysis, Air Selangor tariff and FAO guidance are referenced in `data/README.md` and the in-app registry.
 
-## Model and economics
+On-site tank, water and electricity readings require your provider or labelled CSV. Provider data is reported by the configured sender; manual imports are user-supplied, not independently certified. Public weather cannot replace site stock, laboratory evidence, permissions or outcome measurement. See `API.md`.
 
-Daily irrigation m³ = `max(ET₀ × 0.8 − rainfall × 0.70, 0) × 4500 ÷ 0.75 ÷ 1000`. This simplified daily water balance omits soil moisture storage and needs local calibration. FAO's 75% sprinkler efficiency is indicative guidance, not a measured system efficiency.
+## Model and limitations
 
-Mulch requirement = `300 m² × 0.05 m × 100 kg/m³ = 1500 kg`. Default 10% demand reduction applies only to the 300 m² pilot beds, or 6.7% of the landscape. It is unvalidated; the slider includes zero. Ready stock starts at an assumed 1,800 kg. A 55% processing yield and seven-day interval are placeholders, not a verified composting protocol.
+Daily irrigation = `max(ET₀ × 0.8 − rain × 0.70, 0) × 4500 ÷ 0.75 ÷ 1000` m³. This omits soil storage and needs calibration. Mulch covers 300 m² of 4,500 m²: `300 × 0.05 × 100 = 1500 kg`. Default 10% effect is unvalidated; sensitivity includes zero. A 55% processing yield/seven-model-day interval is a fixture, not a validated composting process. Demand reduction and rainwater substitution are accounted separately; future rain, stock, deliveries and credits are never added as duplicate water savings.
 
-Potable avoidance = total-demand reduction + eligible rainwater substitution. Stored rainwater, potential future roof inflow and delivered water are separate; rain is not counted twice. Allocation cannot exceed stock minus reserve, transport capacity or eligible demand. Credits and material kg are not added to water m³ or converted to unsupported carbon claims.
+Tariff uses the retained non-domestic monthly bill schedule with an assumed meter class and other monthly use. Transport, handling and reward costs are assumptions, not quotations. Additional cost defaults to zero because unpriced; this is not full lifecycle ROI. Energy greedily enumerates feasible start slots, not a global optimum; capacity/load/tariff/labour/performance remain assumptions. Imported Water results compare 14 matching days with the model baseline without causal attribution. Energy compares 28–31-day daily grid-import cycles normalised by day count; no causal or weather-normalised saving is claimed.
 
-Published non-domestic tariff: first 35 m³ at RM 3.51/m³, above 35 m³ at RM 3.83/m³, minimum monthly bill RM 36. Avoided cost is a difference between monthly bills with an assumed 100 m³ of other use, keeping the comparison in the upper tier. The bill includes the model window within a hypothetical month; the app does not compare a 14-day volume with an actual monthly invoice.
+## Audit and local operation
 
-Incremental delivery RM 40 on an existing run, dedicated delivery RM 160, handling RM 40, and the full 200 kg campaign reward cap RM 60 are provisional assumptions, not quotes. Positive water benefit need not mean positive financial benefit. Ranking is an illustrative weighted score, not an optimisation solver or calibrated confidence estimate.
+SQLite transactions append SHA-256-linked Ed25519-signed events. Triggers reject audit/telemetry/credit edits. Writes verify chain, record snapshots, import digests and a local signed anchor. Unique award keys prevent replay; revisions reject stale approvals. Reset starts a new cycle retaining signed history. Verify an exported bundle:
 
-## Sources and retained records
+```powershell
+node verify-evidence.mjs PATH_TO_EXPORTED_JSON OPTIONAL_PINNED_SHA256_FINGERPRINT
+```
 
-- [Air Selangor tariff appendix](https://content.airselangor.com/cmi-prod-blobstorageanon-001-sea/media/uigh3doj/appendix-b.pdf).
-- [MET Malaysia API documentation](https://developer.data.gov.my/realtime-api/weather); fixed Petaling ID `Ds057`.
-- [Open-Meteo historical weather documentation](https://open-meteo.com/en/docs/historical-weather-api); the full request and provenance are in `data.js`, with the original response in `data/climate-july-2025.json`.
-- [FAO indicative irrigation efficiency](https://www.fao.org/4/t7202e/t7202e08.htm) and [crop water requirements](https://www.fao.org/aquastat/en/data-analysis/irrig-water-use/irrig-water-requirement/index.html).
-- [Open-Meteo / ERA5 data attribution](https://open-meteo.com/en/docs/historical-weather-api). Open-Meteo data are provided under CC BY 4.0; ERA5 is produced by ECMWF through Copernicus Climate Change Service. This app uses reanalysis without site validation.
+Keep an original fingerprint/checkpoint outside the server. This detects changes under that pinned identity; it is not absolute immutability against an administrator controlling both data and signing key. Without an independent pin, verification establishes internal consistency. Revision-zero fixtures are not signed field evidence.
 
-`data/README.md` records scope, retrieval dates and regeneration requirements. Do not change an old snapshot's retrieval date without actually fetching new data.
+Server binds loopback only; do not expose publicly as-is. Sessions expire after two hours. Production needs HTTPS, managed accounts/key rotation, organisation isolation, backups/privacy controls and independent execution evidence. Back up the whole `.nexus/` folder while stopped. `NEXUS_DATA_DIR` changes the private folder; `PORT` changes the port. Node may emit its SQLite experimental-feature notice.
 
-## Brand assets
+```powershell
+npm.cmd test
+```
 
-Logo source files are retained in `assets/nexus-logo.svg`, `nexus-logo-light.svg` and `nexus-mark.svg`. The interlocking N represents the operations/community connection. SVG paths have no font dependency. The UI ships the official Manrope variable font locally under its SIL Open Font License in `assets/FONT-LICENSE.txt`.
+`engine.js`/`platform.js` own deterministic models and transitions; `evidence.js` evidence; `store.mjs` transactions/accounts/signatures; `api.mjs` routes; `workspace-ui.js` new module views alongside `app.js`. No build step or dependencies.
 
-## Architecture and prototype limits
+See `REQUIREMENTS.md`, `PILOT.md` and `PITCH.md` for traceability, judging, governance, commercial assumptions, slide-ready content and a three-minute script. The organiser's actual slide template has not been populated. No physical devices, measured outcomes, interviews, field permissions or team biographies are invented.
 
-Buildless ES modules, CSS and Node standard library; no installed packages. `engine.js` owns calculations and guarded transitions. `app.js` renders four connected views, local persistence and JSON export. `data.js` embeds retained public reference data; `weather.js` validates MET responses; `live.js` validates the numeric current/forecast feed and freshness; `motion.js` owns dismissible action feedback; `live.css` styles the live panel and action choreography. `server.mjs` serves an explicit file allowlist and fixed public forecast endpoints. MET uses a ten-minute cache and labelled retained snapshot; the live feed uses a one-minute cache, 6.5-second timeout and last-success / unavailable behavior described above.
-
-The explanation is template-generated, not an LLM integration. Staff/resident roles are simulated; there is no authentication, real QR scanner, telemetry, payments, external dispatch or immutable audit backend. The editable localStorage trail is demonstration evidence only. Each scenario has one plan; multi-plan concurrency requires server-side transactional stock and permissions. Real pilot work needs measured stock, quality and route evidence, calibrated demand, supplier quotes, an approved processing method and outcome collection. No water-safety certification or regulatory compliance is implied by demo receipts.
-
-The scope can serve Malaysian communities beyond one developer. Energy and mobility remain future modules, not implemented features.
+Source logos stay in `assets/`; locally bundled Manrope retains its SIL Open Font License. References: [Open-Meteo/ERA5](https://open-meteo.com/en/docs/historical-weather-api), [MET](https://developer.data.gov.my/realtime-api/weather), [Air Selangor tariff](https://content.airselangor.com/cmi-prod-blobstorageanon-001-sea/media/uigh3doj/appendix-b.pdf), [FAO efficiency](https://www.fao.org/4/t7202e/t7202e08.htm).

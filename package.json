@@ -1,15 +1,17 @@
 {
   "name": "nexus-township",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
-  "description": "NEXUS live weather-driven resource planning with animated operational feedback",
+  "description": "NEXUS township orchestration: water, BioLoop, energy and RideShare with signed server audit",
   "scripts": {
     "start": "node server.mjs",
     "dev": "node server.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "verify:evidence": "node verify-evidence.mjs",
+    "accounts": "node tools/accounts.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24.0.0"
   }
 }

@@ -1,5 +1,6 @@
 import { CLIMATE } from './data.js';
 import {isLiveFresh} from './live.js';
+import {waterEvidence} from './evidence.js';
 export const round = n => Math.round((n + Number.EPSILON) * 100) / 100;
 export const ASSUMPTIONS = {
   tariff: 3.83, lowerTariff: 3.51, tariffThreshold: 35, minimumBill: 36, otherMonthlyUse: 100,
@@ -18,7 +19,7 @@ export const SOURCES = [
   { id: 'site', category: 'Site assumptions', title: 'Pilot assets, stock and budgets', date: 'Illustrative site model', url: null, detail: '4,500 m² landscape; 500 m² roof; 60 m³ tank; 45 m³ starting stock in the dry scenario; 5 m³ reserve; 40 m³ fortnightly transfer cap. 300 m² treated beds × 0.05 m depth × 100 kg/m³ = 1,500 kg existing mulch. Stock, quality receipts, routes, handling fees and reward budgets are simulated; they are not SDP operational records.' },
   { id: 'effect', category: 'Sensitivity assumption', title: 'Mulch effect and outcome model', date: 'Unvalidated pilot parameters', url: null, detail: 'Default 10% irrigation reduction applies only to the 300 m² treated beds, not the entire 4,500 m² park. Slider explores 0–15%. Raw-to-processed yield 55% and 7-day processing are placeholders pending material validation. Post-intervention readings are synthetic and cannot prove real savings or causal attribution.' }
 ];
-const scenarioFactors = { normal: { rain: 2.2, et: 0.90 }, dry: { rain: 1, et: 1 }, monsoon: { rain: 8, et: 0.82 } };
+const scenarioFactors = { normal: { rain: 2.2, et: 0.90 }, dryspell: {rain:2.2,et:0.90,demand:1.3}, dry: { rain: 1, et: 1 }, monsoon: { rain: 8, et: 0.82 } };
 export function dailyModel(key, liveInputs=null) {
   const source=key==='live'?liveInputs:CLIMATE;
   if(key==='live'&&!source)return [];
@@ -29,26 +30,27 @@ export function dailyModel(key, liveInputs=null) {
     const sourceEt = source.daily.et0_fao_evapotranspiration[index];
     if (!Number.isFinite(sourceRain) || !Number.isFinite(sourceEt) || sourceRain < 0 || sourceEt < 0) throw new Error('Missing public climate inputs; calculation blocked.');
     const rain = sourceRain * factors.rain, et0 = sourceEt * factors.et;
-    const demand = Math.max(0, et0 * ASSUMPTIONS.cropCoefficient - rain * ASSUMPTIONS.effectiveRainFraction) * ASSUMPTIONS.landscapeArea / ASSUMPTIONS.irrigationEfficiency / 1000;
+    const demand = Math.max(0, et0 * ASSUMPTIONS.cropCoefficient - rain * ASSUMPTIONS.effectiveRainFraction) * ASSUMPTIONS.landscapeArea / ASSUMPTIONS.irrigationEfficiency / 1000 * (factors.demand??1);
     return { date, sourceRain, sourceEt, rain: round(rain), et0: round(et0), demand: round(demand) };
   });
 }
 const baselineFor = key => round(dailyModel(key).reduce((sum, day) => sum + day.demand, 0));
 const normalBaseline = baselineFor('normal');
 export const SCENARIOS = Object.fromEntries([
-  ['normal', 'Seasonal baseline', 35, 20, true], ['dry', 'Dry reference', 45, 40, true], ['monsoon', 'Storm stress-test', 45, 30, false]
+  ['normal', 'Seasonal baseline', 35, 20, true], ['dryspell','Dry spell +30%',45,40,true], ['dry', 'Dry reference', 45, 40, true], ['monsoon', 'Storm stress-test', 45, 30, false]
 ].map(([key, name, tank, target, quality]) => {
   const baseline = baselineFor(key);
   return [key, { name, baseline, historical: normalBaseline, tank, reserve: 5, transport: 40, quality, target,
-    description: key === 'dry' ? `ERA5 reference · ${Math.round((baseline / normalBaseline - 1) * 100)}% above modelled baseline` : key === 'normal' ? 'Scaled reference · rainfall ×2.2 / ET₀ ×0.9' : 'Scaled reference · rainfall ×8 / ET₀ ×0.82',
-    observedDemand: round(baseline * 0.988), observedRain: key === 'dry' ? 36 : key === 'normal' ? 18 : 0,
+    description: key==='dryspell'?'Synthetic demand stress +30% against the seasonal model':key === 'dry' ? `ERA5 reference · ${Math.round((baseline / normalBaseline - 1) * 100)}% above modelled baseline` : key === 'normal' ? 'Scaled reference · rainfall ×2.2 / ET₀ ×0.9' : 'Scaled reference · rainfall ×8 / ET₀ ×0.82',
+    observedDemand: round(baseline * 0.988), observedRain: ['dry','dryspell'].includes(key) ? 36 : key === 'normal' ? 18 : 0,
     rainfall: round(dailyModel(key).reduce((sum, day) => sum + day.rain, 0)), factors: scenarioFactors[key] }];
 }));
 
 export function getScenario(state){
   if(state.scenario!=='live')return SCENARIOS[state.scenario];
   const input=state.liveInputs,days=dailyModel('live',input),baseline=round(days.reduce((sum,d)=>sum+d.demand,0));
-  return {...SCENARIOS.dry,name:'Live outlook',baseline,historical:normalBaseline,target:Math.min(40,Math.floor(baseline)),description:'Current public forecast · hypothetical site',rainfall:round(days.reduce((sum,d)=>sum+d.rain,0)),factors:{rain:1,et:1},observedDemand:round(baseline*.988),observedRain:round(Math.min(36,baseline*.988)),window:input?input.daily.time[0]+' → '+input.daily.time.at(-1):'Waiting for public forecast'};
+  const supplied=state.siteInputs;
+  return {...SCENARIOS.dry,...(supplied?{tank:supplied.tank.value,quality:!!supplied.quality?.reference&&(state.status!=='PENDING_HUMAN_REVIEW'||Date.parse(supplied.quality.expiresAt)>Date.now())}:{}),name:'Live outlook',baseline,historical:normalBaseline,target:Math.min(40,Math.floor(baseline)),description:'Current public forecast · declared site inputs',rainfall:round(days.reduce((sum,d)=>sum+d.rain,0)),factors:{rain:1,et:1},observedDemand:round(baseline*.988),observedRain:round(Math.min(36,baseline*.988)),window:input?input.daily.time[0]+' → '+input.daily.time.at(-1):'Waiting for public forecast'};
 }
 
 export function nonDomesticBill(volume) {
@@ -58,7 +60,10 @@ export function nonDomesticBill(volume) {
 export const processingLimit = kg => Math.floor(kg * ASSUMPTIONS.yield * 100 + 1e-9) / 100;
 export function initialState(scenario = 'dry',liveInputs=null) {
   if (scenario!=='live'&&!SCENARIOS[scenario]) throw new Error('Unknown scenario');
-  return { version: 2, scenario, requested: scenario==='live'?Math.min(40,Math.floor(getScenario({scenario,liveInputs}).baseline)):SCENARIOS[scenario].target, ...(scenario==='live'?{liveInputs}:{}), parameters: { mulchEffect: 0.10, deliveryMode: 'shared' }, status: 'PENDING_HUMAN_REVIEW', reservation: 0, tasks: { inspect: false, transfer: false, mulch: false }, collection: { status: 'AVAILABLE', claimedKg: 20, verifiedKg: 0, credits: 0, processedKg: 0 }, events: [{ sequence: 1, day: 0, actor: 'Resource engine', action: 'Opportunity modelled', detail: `${scenario==='live'?'Live outlook':SCENARIOS[scenario].name}; public weather reference and tariff; hypothetical site and outcomes.` }], observation: null, note: '' };
+  const state={ version: 2, scenario, requested: scenario==='live'?Math.min(40,Math.floor(getScenario({scenario,liveInputs}).baseline)):SCENARIOS[scenario].target, ...(scenario==='live'?{liveInputs}:{}), parameters: { mulchEffect: 0.10, deliveryMode: 'shared' }, status: 'PENDING_HUMAN_REVIEW', reservation: 0, tasks: { inspect: false, transfer: false, mulch: false }, collection: { status: 'AVAILABLE', claimedKg: 20, verifiedKg: 0, credits: 0, processedKg: 0 }, events: [{ sequence: 1, day: 0, actor: 'Resource engine', action: 'Opportunity modelled', detail: `${scenario==='live'?'Live outlook':SCENARIOS[scenario].name}; public weather reference and tariff; hypothetical site and outcomes.` }], observation: null, note: '' };
+  const original=state.events[0],score=evaluate(state);
+  state.events=[{...original,action:'Opportunity detected',detail:original.detail+' Candidate status: DETECTED.'},{sequence:2,day:0,actor:'Deterministic engine',action:'Opportunity scored',detail:'SCORED: '+score.score+'/100; '+score.checks.filter(c=>c.ok).length+'/'+score.checks.length+' hard constraints pass; evidence '+score.evidence.score+'/100 rules index.'},{sequence:3,day:0,actor:'Workflow router',action:'Pending human review',detail:'PENDING_HUMAN_REVIEW. No work, allocation or credits executed.'}];
+  return state;
 }
 export function evaluate(state) {
   const s = getScenario(state);
@@ -68,11 +73,12 @@ export function evaluate(state) {
   const valid = Number.isFinite(requested) && requested > 0 && requested <= maxWater;
   const checks = [
     { id: 'CAP_01', ok: valid, name: 'Available water and delivery capacity', detail: `${s.tank} m³ stored − ${s.reserve} m³ reserve; ${s.transport} m³ delivery capacity / 14 days. Request must be 0 < volume ≤ ${maxWater} m³.` },
-    { id: 'QUALITY_02', ok: s.quality, name: 'Non-potable quality evidence', detail: s.quality ? 'Synthetic lab receipt WQ-DEMO-21 is present. Real deployment requires local review.' : 'Quality receipt is missing after heavy rainfall. Allocation is blocked.' },
+    { id: 'QUALITY_02', ok: s.quality, name: 'Non-potable quality evidence', detail:state.siteInputs?(s.quality?'Operator-reviewed reference '+state.siteInputs.quality.reference+'. User attestation; not regulatory certification.':'A current operator-reviewed water-quality reference is required.'):(s.quality ? 'Synthetic lab receipt WQ-DEMO-21 is present. Real deployment requires local review.' : 'Quality receipt is missing after heavy rainfall. Allocation is blocked.') },
     { id: 'USE_03', ok: true, name: 'Landscape irrigation only', detail: 'Demo end-use is non-potable irrigation. This is a scenario rule, not regulatory certification.' },
-    { id: 'OWN_04', ok: true, name: 'Asset owner and route consent', detail: 'Simulated permissions for Tank A and the nursery; bowser route available.' },
+    { id: 'OWN_04', ok:state.siteInputs?!!state.siteInputs.routeReference:true, name: 'Asset owner and route consent', detail:state.siteInputs?'Operator-reviewed route / owner consent: '+state.siteInputs.routeReference:'Simulated permissions for Tank A and the nursery; bowser route available.' },
     { id: 'BIO_05', ok: a.mulchReady >= a.mulchRequired, name: 'Existing processed mulch', detail: `${a.mulchReady} kg ready stock covers ${a.mulchRequired} kg application. New green waste replenishes a future cycle.` }
   ];
+  if(state.siteInputs)checks.push({id:'SUPPLY_07',ok:state.status!=='PENDING_HUMAN_REVIEW'||Date.now()-Date.parse(state.siteInputs.tank.at)<=90*60000,name:'Supplied tank reading is current',detail:state.siteInputs.tank.source+' · '+state.siteInputs.tank.at+'. Approved supply evidence is frozen with the plan.'});
   const water = valid && s.quality ? requested : 0;
   if(state.scenario==='live')checks.push({id:'LIVE_06',ok:!!state.liveInputs&&(state.status!=='PENDING_HUMAN_REVIEW'||isLiveFresh(state.liveInputs)),name:'Current public forecast',detail:state.liveInputs?'Forecast captured '+state.liveInputs.fetchedAt+'. Approved inputs freeze; new weather never rewrites an approved plan.':'Waiting for a current public forecast. Approval is unavailable.'});
   const effect = state.parameters.mulchEffect;
@@ -82,10 +88,12 @@ export function evaluate(state) {
   const avoided = conservation + substitution;
   const rewardBudget = a.campaignKg * a.creditsPerKg * a.multiplier * a.creditValue;
   const deliveryCost = state.parameters.deliveryMode === 'shared' ? a.deliveryCost : a.dedicatedDeliveryCost;
-  const cost = deliveryCost + a.handlingCost + rewardBudget;
+  const extraCost=state.parameters.extraCost??0;
+  const cost = deliveryCost + a.handlingCost + rewardBudget+extraCost;
   const benefit = round(nonDomesticBill(a.otherMonthlyUse + s.baseline) - nonDomesticBill(a.otherMonthlyUse + predictedTotal - substitution));
-  const scoreParts = { water: Math.round(50 * Math.min(1, avoided / Math.max(1,s.baseline) / 0.30)), cost: Math.round(30 * Math.min(1, benefit / cost)), data: 10 };
-  return { checks, feasible: checks.every(c => c.ok), maxWater, water, conservation, predictedTotal: round(predictedTotal), substitution: round(substitution), avoided: round(avoided), predictedPotable: round(predictedTotal - substitution), rewardBudget, deliveryCost, cost, benefit, net: round(benefit - cost), scoreParts, score: checks.every(c => c.ok) ? Object.values(scoreParts).reduce((x, y) => x + y, 0) : 0, collectedRain: round(s.rainfall / 1000 * a.catchmentArea * a.collectionEfficiency), uncertainty: [round(substitution), round(substitution + s.baseline * a.treatedArea / a.landscapeArea * 0.15)] };
+  const evidence=waterEvidence(state);
+  const scoreParts = { water: Math.round(50 * Math.min(1, avoided / Math.max(1,s.baseline) / 0.30)), cost: Math.round(30 * Math.min(1, benefit / cost)), data: Math.round(20*evidence.score/100) };
+  return { checks,evidence,extraCost, feasible: checks.every(c => c.ok), maxWater, water, conservation, predictedTotal: round(predictedTotal), substitution: round(substitution), avoided: round(avoided), predictedPotable: round(predictedTotal - substitution), rewardBudget, deliveryCost, cost, benefit, net: round(benefit - cost), scoreParts, score: checks.every(c => c.ok) ? Object.values(scoreParts).reduce((x, y) => x + y, 0) : 0, collectedRain: round(s.rainfall / 1000 * a.catchmentArea * a.collectionEfficiency), uncertainty: [round(substitution), round(substitution + s.baseline * a.treatedArea / a.landscapeArea * 0.15)] };
 }
 function record(state, actor, action, detail, day) {
   const currentDay = state.events.at(-1)?.day ?? 0;
@@ -94,7 +102,7 @@ function record(state, actor, action, detail, day) {
 export function transition(current, action, payload = {}) {
   const state = structuredClone(current);
   const active = state.status === 'MOBILISED';
-  const collectionActive = active || state.status === 'SIMULATED_VERIFIED';
+  const collectionActive = active || ['SIMULATED_VERIFIED','EVIDENCE_REVIEWED'].includes(state.status);
   const a = ASSUMPTIONS;
   switch (action) {
     case 'live-inputs': {
@@ -111,9 +119,11 @@ export function transition(current, action, payload = {}) {
       if (!Number.isFinite(value) || value <= 0) throw new Error('Enter a positive water volume.');
       const mulchEffect = Number(payload.mulchEffect ?? state.parameters.mulchEffect);
       const deliveryMode = payload.deliveryMode ?? state.parameters.deliveryMode;
+      const extraCost=Number(payload.extraCost??state.parameters.extraCost??0);
       if (!Number.isFinite(mulchEffect) || mulchEffect < 0 || mulchEffect > 0.15 || !['shared', 'dedicated'].includes(deliveryMode)) throw new Error('Invalid sensitivity parameters.');
       state.requested = value;
-      state.parameters = { mulchEffect, deliveryMode };
+      if(!Number.isFinite(extraCost)||extraCost<0||extraCost>100000)throw new Error('Additional costs must be between RM0 and RM100,000.');
+      state.parameters = { mulchEffect, deliveryMode,extraCost };
       record(state, 'Township manager (demo)', 'Plan assumptions updated', `${value} m³ requested; ${Math.round(mulchEffect * 100)}% effect on ${a.treatedArea} m² beds only; ${deliveryMode} delivery. Constraints and economics recalculated.`);
       break;
     }
@@ -121,6 +131,7 @@ export function transition(current, action, payload = {}) {
       if (state.status !== 'PENDING_HUMAN_REVIEW') throw new Error('This playbook has already been reviewed.');
       if (!evaluate(state).feasible) throw new Error('Resolve all hard constraints before approval.');
       state.reservation = Number(state.requested);
+      state.reviewedAt=new Date().toISOString();
       state.status = 'APPROVED_BY_OPERATOR';
       state.note = String(payload.note || 'Reviewed the synthetic inputs, existing mulch stock and delivery budget.').slice(0, 500);
       record(state, 'Township manager (demo)', 'Playbook approved', `${state.reservation} m³ reserved. ${state.note}`);
