@@ -6,10 +6,25 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {Store} from '../store.mjs';
 import {createApi} from '../api.mjs';
+
+test('HTTPS login and logout keep Secure cookies, exact-origin checks and shared login throttling',async t=>{
+ const store=await Store.open(mkdtempSync(path.join(tmpdir(),'nexus-https-test-')),{testPassword:'test-only-long-password'});
+ const api=createApi(store,{getWeather:async()=>null,secureCookies:true,originFor:()=> 'https://nexus.example'});
+ const server=http.createServer(async(req,res)=>{await api(req,res,new URL(req.url,'https://nexus.example'));});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await store.close();});
+ const base='http://127.0.0.1:'+server.address().port;
+ async function login(origin,password='test-only-long-password'){return fetch(base+'/api/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({username:'manager',password})});}
+ assert.equal((await login('http://nexus.example')).status,403);assert.equal((await login('https://attacker.example')).status,403);
+ const response=await login('https://nexus.example'),session=await response.json(),cookie=response.headers.get('set-cookie');assert.equal(response.status,200);assert.match(cookie,/; Secure/);
+ const logout=await fetch(base+'/api/logout',{method:'POST',headers:{Origin:'https://nexus.example',Cookie:cookie.split(';')[0],'Content-Type':'application/json','X-Nexus-CSRF':session.csrf},body:'{}'});assert.equal(logout.status,200);assert.match(logout.headers.get('set-cookie'),/; Secure/);
+ for(let i=0;i<15;i++)assert.equal((await login('https://nexus.example','wrong')).status,401);
+ assert.equal((await login('https://nexus.example','wrong')).status,429);
+});
 test('HTTP sessions, CSRF, roles, device provenance and signed export enforce trust boundaries',async t=>{
- const store=new Store(mkdtempSync(path.join(tmpdir(),'nexus-api-test-')),{testPassword:'test-only-long-password'}),api=createApi(store,{getWeather:async()=>null});
+ const store=await Store.open(mkdtempSync(path.join(tmpdir(),'nexus-api-test-')),{testPassword:'test-only-long-password'}),api=createApi(store,{getWeather:async()=>null});
  const server=http.createServer(async(req,res)=>{if(!await api(req,res,new URL(req.url,'http://localhost'))){res.writeHead(404);res.end();}});
- await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));store.close();});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));(await store.close());});
  const base='http://127.0.0.1:'+server.address().port;
  async function call(url,body,headers={}){return fetch(base+url,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json',...headers}:headers,body:body?JSON.stringify(body):undefined});}
  assert.equal((await call('/api/workspace')).status,401);
@@ -30,11 +45,11 @@ test('HTTP sessions, CSRF, roles, device provenance and signed export enforce tr
 });
 
 test('external service endpoints enforce methods, origin and private ThingSpeak role boundaries',async t=>{
- const store=new Store(mkdtempSync(path.join(tmpdir(),'nexus-services-http-')),{testPassword:'test-only-long-password'}),calls=[];
+ const store=await Store.open(mkdtempSync(path.join(tmpdir(),'nexus-services-http-')),{testPassword:'test-only-long-password'}),calls=[];
  const services={privateThingSpeak:true,get:async(id,corridor)=>{calls.push({id,corridor});return {id,status:'available',data:{source:'test provider'}};}};
  const api=createApi(store,{getWeather:async()=>null,services});
  const server=http.createServer(async(req,res)=>{if(!await api(req,res,new URL(req.url,'http://localhost'))){res.writeHead(404);res.end();}});
- await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));store.close();});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));(await store.close());});
  const base='http://127.0.0.1:'+server.address().port;
  assert.equal((await fetch(base+'/api/services/flood')).status,200);
  assert.equal((await fetch(base+'/api/services/flood',{method:'POST'})).status,405);

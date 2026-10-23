@@ -1,0 +1,11 @@
+.git/
+.nexus/
+.env
+.env.*
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.pem
+node_modules/
+public/
+tests/

@@ -155,3 +155,7 @@ assets/general-sans.woff2
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+
+# Generated deployment assets and local Vercel settings
+public/
+.vercel/

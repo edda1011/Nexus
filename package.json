@@ -9,9 +9,15 @@
     "dev": "node server.mjs",
     "test": "node --test tests/*.test.mjs",
     "verify:evidence": "node verify-evidence.mjs",
-    "accounts": "node tools/accounts.mjs"
+    "accounts": "node tools/accounts.mjs",
+    "db:setup": "node tools/setup-neon.mjs",
+    "test:postgres": "node --env-file=.env --test tests/postgres.test.mjs",
+    "build": "node tools/build.mjs"
   },
   "engines": {
-    "node": ">=24.0.0"
+    "node": "24.x"
+  },
+  "dependencies": {
+    "pg": "8.23.1"
   }
 }

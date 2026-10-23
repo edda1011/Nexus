@@ -6,7 +6,7 @@ An interactive hackathon prototype connecting Water + BioLoop, Energy scheduling
 
 ## Start in VS Code
 
-Requires **Node.js 24+**, including built-in SQLite. Check `node --version`. No npm install or external database setup is needed. Stop any older prototype terminal with Ctrl+C, then:
+Requires **Node.js 24.x**, including built-in SQLite. Check `node --version`. Run `npm.cmd install` once after cloning or pulling this deployment update. With `DATABASE_URL` blank, no external database setup is needed. Stop any older prototype terminal with Ctrl+C, then:
 
 ```powershell
 cd C:\Users\eddac\source\repos\Nexus
@@ -27,6 +27,21 @@ This prints the different random passwords generated at first startup. Sign in t
 | staff | Record work, nursery weights/processing and Energy execution; import readings. |
 | driver / rider | Separate resident participants; own bookings/check-ins/trip attestations. |
 | auditor | Read-only workspace and signed export. |
+
+## Deploy to Vercel with Neon
+
+The same application can use Neon Postgres instead of local SQLite. Calculations, role permissions, workflows and API routes remain the same. Do not deploy a local SQLite database to a serverless filesystem.
+
+1. Create a Neon Postgres project near the application (Singapore), then privately add the pooled `postgresql://…` connection string as `DATABASE_URL` in local `.env`.
+2. Stop the old local server before migration. Run `npm.cmd run db:setup`. This verifies and copies existing local accounts/password hashes, records, telemetry, credits and the signed audit into an empty database in one transaction. It retains the original SQLite files. Local browser sessions are deliberately not copied; sign in again. Re-running setup on the same identity retains the existing cloud data; it does not resynchronise later local changes or overwrite a different identity.
+3. Setup saves the original signing key as `NEXUS_SIGNING_KEY` privately in `.env`. Back up `.nexus/` and `.env` securely. Do not rotate this key on redeploy: the database fingerprint must continue to match it.
+4. Commit/push source changes, then import the repository in Vercel with the **Node** preset and root `./`. The committed configuration selects Singapore and runs `npm run build`. Leave Output Directory at its default; do not set it to the repository root.
+5. Add `DATABASE_URL`, `NEXUS_SIGNING_KEY` and the existing `NEXUS_ORS_API_KEY`, route endpoints and ThingSpeak settings from `.env` to Vercel's **Production** environment. Never add private values to Git or frontend code. Leave `PORT` and `NEXUS_DATA_DIR` unset on Vercel. Vercel provides deployment/production origins automatically; for a custom domain, set `NEXUS_PUBLIC_ORIGIN=https://your-domain.example` (no trailing slash). Preview deployments should use a separate Neon branch/database and matching setup, rather than sharing the production workspace.
+6. Deploy, then verify login, Connections & audit, a signed export and public data refresh. An upstream API outage still displays its honest unavailable/stale state. A successful local test is not a guarantee of provider availability during deployment.
+
+`npm.cmd run build` copies only the explicit static allowlist into generated `public/`. It obtains General Sans from official Fontshare if the locally licensed copy is missing, so the font need not be redistributed through Git. Private files and backend source are not public assets. Hosted cookies use Secure + HttpOnly + SameSite=Strict; exact-origin/CSRF checks remain enforced. Sessions, rate limits, records and checkpoints persist in Postgres. Database transactions use a per-township advisory lock to preserve audit ordering and reject concurrent stale revisions. This intentionally serialises one prototype township; it is not a multi-tenant throughput claim.
+
+Validation: `npm.cmd test` runs local regression tests. `npm.cmd run test:postgres` uses the configured Neon connection but creates and removes only a random `nexus_test_…` schema, keeping synthetic test records out of the production `public` schema. The website remains a prototype: public reference streams do not become physical site telemetry through hosting.
 
 ## Implemented modules
 

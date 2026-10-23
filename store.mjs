@@ -1,4 +1,4 @@
-import {DatabaseSync} from 'node:sqlite';
+import {Database,PostgresDatabase} from './database.mjs';
 import {mkdirSync,readFileSync,writeFileSync,existsSync,renameSync} from 'node:fs';
 import path from 'node:path';
 import {randomBytes,scryptSync,timingSafeEqual,createHash,generateKeyPairSync,createPrivateKey,createPublicKey,sign,verify} from 'node:crypto';
@@ -13,9 +13,26 @@ export const ACCOUNT_ROLES={manager:'Township manager',staff:'Facilities / nurse
 export const INPUT_KINDS={'tank-volume':{unit:'m³',max:60},'water-use':{unit:'m³/day',max:100000},'water-delivery':{unit:'m³',max:40},'grid-import':{unit:'kWh/day',max:100000},'solar-generation':{unit:'kWh/day',max:100000},'traffic-count':{unit:'vehicles/hour',max:100000},'soil-moisture':{unit:'%',max:100}};
 const ASSET_KINDS={'tank-a':['tank-volume','water-delivery'],'zone-b':['water-use','soil-moisture'],'community-hall':['grid-import','solar-generation'],'school-corridor':['traffic-count'],'office-corridor':['traffic-count']};
 export class Store {
-  constructor(directory,{testPassword=null}={}){
-    mkdirSync(directory,{recursive:true});this.directory=directory;this.db=new DatabaseSync(path.join(directory,'nexus.sqlite'));
-    this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
+  static async open(directory,options={}){
+    const store=new Store();
+    try{await store.initialise(directory,options);return store;}catch(error){await store.db?.close();throw error;}
+  }
+  async initialise(directory,{testPassword=null,databaseUrl=null,signingKey=process.env.NEXUS_SIGNING_KEY,database=null}={}){
+    this.directory=directory;
+    if(database||databaseUrl){
+      this.db=database||new PostgresDatabase(databaseUrl);
+      if(!signingKey)fail('NEXUS_SIGNING_KEY is required. Run npm run db:setup locally first.',503);
+      this.privateKey=createPrivateKey(Buffer.from(signingKey,'base64'));
+      this.publicKey=createPublicKey(this.privateKey).export({type:'spki',format:'pem'}).toString();this.fingerprint=sha(this.publicKey);
+      const meta=await this.db.prepare('SELECT key,value FROM nexus_meta').all(),values=Object.fromEntries(meta.map(row=>[row.key,row.value]));
+      if(values.fingerprint!==this.fingerprint||!values.deviceTokenHash)fail('Database identity differs or is not initialised. Run npm run db:setup locally; keep the original signing identity.',503);
+      this.deviceTokenHash=values.deviceTokenHash;
+      const audit=await this.verifyAudit();if(!audit.valid)fail('Audit integrity failed at startup: '+audit.reason,503);
+      return;
+    }
+    mkdirSync(directory,{recursive:true});this.db=new Database(path.join(directory,'nexus.sqlite'));
+    await this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
+      CREATE TABLE IF NOT EXISTS login_attempts(ip_hash TEXT PRIMARY KEY,at INTEGER NOT NULL,count INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS users(username TEXT PRIMARY KEY,role TEXT NOT NULL,salt TEXT NOT NULL,password_hash TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,username TEXT NOT NULL REFERENCES users(username),csrf TEXT NOT NULL,expires INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS records(id TEXT PRIMARY KEY,revision INTEGER NOT NULL,value TEXT NOT NULL);
@@ -31,91 +48,117 @@ export class Store {
       CREATE TRIGGER IF NOT EXISTS credits_no_delete BEFORE DELETE ON credits BEGIN SELECT RAISE(ABORT,'Credit awards are append-only'); END;`);
     const privateFile=path.join(directory,'signing-private.pem');
     if(!existsSync(privateFile)){
-      if(this.db.prepare('SELECT COUNT(*) AS n FROM audit').get().n)fail('Audit key is missing. Restore the original key; refusing to replace audit identity.',503);
+      if((await this.db.prepare('SELECT COUNT(*) AS n FROM audit').get()).n)fail('Audit key is missing. Restore the original key; refusing to replace audit identity.',503);
       const keys=generateKeyPairSync('ed25519');writeFileSync(privateFile,keys.privateKey.export({type:'pkcs8',format:'pem'}),{mode:0o600,flag:'wx'});
     }
     this.privateKey=createPrivateKey(readFileSync(privateFile));this.publicKey=createPublicKey(this.privateKey).export({type:'spki',format:'pem'}).toString();
     this.fingerprint=sha(this.publicKey);
     const bootstrap=path.join(directory,'bootstrap.json');
-    if(!this.db.prepare('SELECT COUNT(*) AS n FROM users').get().n){
+    if(!(await this.db.prepare('SELECT COUNT(*) AS n FROM users').get()).n){
       const credentials={deviceToken:token(),accounts:{}};
       for(const username of Object.keys(ACCOUNT_ROLES)){
         const password=testPassword||token().slice(0,18),salt=randomBytes(16).toString('hex');credentials.accounts[username]=password;
-        this.db.prepare('INSERT INTO users VALUES(?,?,?,?)').run(username,['driver','rider'].includes(username)?'resident':username,salt,scryptSync(password,salt,64).toString('hex'));
+        await this.db.prepare('INSERT INTO users VALUES(?,?,?,?)').run(username,['driver','rider'].includes(username)?'resident':username,salt,scryptSync(password,salt,64).toString('hex'));
       }
       writeFileSync(bootstrap,JSON.stringify(credentials,null,2),{mode:0o600,flag:'wx'});
     }
-    this.bootstrap=JSON.parse(readFileSync(bootstrap,'utf8'));
-    for(const scenario of [...Object.keys(SCENARIOS),'live'])this.insertRecord('water:'+scenario,initialState(scenario));
-    this.insertRecord('energy',energyInitial());this.insertRecord('rides',ridesInitial());
-    const audit=this.verifyAudit();if(!audit.valid)fail('Audit integrity failed at startup: '+audit.reason,503);
+    this.bootstrap=JSON.parse(readFileSync(bootstrap,'utf8'));this.deviceTokenHash=sha(this.bootstrap.deviceToken);
+    for(const scenario of [...Object.keys(SCENARIOS),'live'])await this.insertRecord('water:'+scenario,initialState(scenario));
+    await this.insertRecord('energy',energyInitial());await this.insertRecord('rides',ridesInitial());
+    const audit=await this.verifyAudit();if(!audit.valid)fail('Audit integrity failed at startup: '+audit.reason,503);
   }
-  close(){this.db.close();}
-  insertRecord(id,value){this.db.prepare('INSERT OR IGNORE INTO records VALUES(?,0,?)').run(id,JSON.stringify(value));}
-  read(id){const row=this.db.prepare('SELECT revision,value FROM records WHERE id=?').get(id);if(!row)fail('Unknown record.',404);return {...JSON.parse(row.value),revision:row.revision};}
-  transaction(fn){this.db.exec('BEGIN IMMEDIATE');try{const result=fn();this.db.exec('COMMIT');this.anchor();return result;}catch(e){try{this.db.exec('ROLLBACK');}catch{}throw e;}}
-  append(actor,stream,action,payload){
-    const last=this.db.prepare('SELECT seq,hash FROM audit ORDER BY seq DESC LIMIT 1').get();
+  async close(){await this.db.close();}
+  async insertRecord(id,value){await this.db.prepare('INSERT INTO records VALUES(?,0,?) ON CONFLICT(id) DO NOTHING').run(id,JSON.stringify(value));}
+  async read(id){const row=await this.db.prepare('SELECT revision,value FROM records WHERE id=?').get(id);if(!row)fail('Unknown record.',404);return {...JSON.parse(row.value),revision:row.revision};}
+  async transaction(fn){
+    return this.db.transaction(async()=>{const result=await fn();if(this.db.kind==='postgres')await this.anchor();return result;},this.db.kind==='sqlite'?()=>this.anchor():null);
+  }
+  async append(actor,stream,action,payload){
+    const last=await this.db.prepare('SELECT seq,hash FROM audit ORDER BY seq DESC LIMIT 1').get();
     const event={seq:(last?.seq??0)+1,at:iso(),actor:actor.username,role:actor.role,stream,action,payload:JSON.stringify(payload),previous:last?.hash??'GENESIS'};
     const hash=sha(JSON.stringify(event)),signature=sign(null,Buffer.from(hash),this.privateKey).toString('base64');
-    this.db.prepare('INSERT INTO audit VALUES(?,?,?,?,?,?,?,?,?,?)').run(event.seq,event.at,event.actor,event.role,stream,action,event.payload,event.previous,hash,signature);
+    await this.db.prepare('INSERT INTO audit VALUES(?,?,?,?,?,?,?,?,?,?)').run(event.seq,event.at,event.actor,event.role,stream,action,event.payload,event.previous,hash,signature);
   }
-  events(){return this.db.prepare('SELECT * FROM audit ORDER BY seq').all();}
-  verifyAudit(){
+  async events(){return await this.db.prepare('SELECT * FROM audit ORDER BY seq').all();}
+  async verifyAudit(){
+    return this.db.transaction(async()=>{
     // ponytail: full-chain verification suits a single-site prototype; use periodic verified checkpoints at scale.
-    const rows=this.events();let previous='GENESIS';
+    const rows=await this.events();let previous='GENESIS';
     for(let i=0;i<rows.length;i++){
       const {hash,signature,...event}=rows[i];
       if(event.seq!==i+1||event.previous!==previous||sha(JSON.stringify(event))!==hash||!verify(null,Buffer.from(hash),this.publicKey,Buffer.from(signature,'base64')))return {valid:false,count:rows.length,reason:'Invalid chain / signature at record '+(i+1),fingerprint:this.fingerprint};
       previous=hash;
     }
-    const anchorFile=path.join(this.directory,'anchor.json');
-    if(existsSync(anchorFile)){
-      let anchor;try{anchor=JSON.parse(readFileSync(anchorFile,'utf8'));}catch{return {valid:false,reason:'Unreadable external checkpoint'};}
+    let anchor;
+    try{
+      if(this.db.kind==='postgres'){
+        const saved=await this.db.prepare("SELECT value FROM nexus_meta WHERE key='checkpoint'").get();if(saved)anchor=JSON.parse(saved.value);
+      }else{
+        const file=path.join(this.directory,'anchor.json');if(existsSync(file))anchor=JSON.parse(readFileSync(file,'utf8'));
+      }
+    }catch{return {valid:false,reason:'Unreadable external checkpoint'};}
+    if(anchor){
       const {signature,...body}=anchor;
       if(!verify(null,Buffer.from(JSON.stringify(body)),this.publicKey,Buffer.from(signature,'base64'))||body.count>rows.length||(body.count&&rows[body.count-1]?.hash!==body.tail))return {valid:false,count:rows.length,reason:'Checkpoint mismatch / truncated tail',fingerprint:this.fingerprint};
     }
-    for(const record of this.db.prepare('SELECT * FROM records WHERE revision>0').all()){
+    for(const record of await this.db.prepare('SELECT * FROM records WHERE revision>0').all()){
       const last=rows.filter(e=>e.stream===record.id).at(-1);
       if(!last||JSON.stringify(JSON.parse(last.payload).state)!==record.value)return {valid:false,count:rows.length,reason:'Record snapshot differs from signed history: '+record.id};
     }
-    const readings=this.telemetry();
-    for(const batch of this.db.prepare('SELECT * FROM batches').all()){
+    const readings=await this.telemetry();
+    for(const batch of await this.db.prepare('SELECT * FROM batches').all()){
       const signed=rows.find(e=>e.stream==='telemetry'&&e.action==='batch-imported'&&JSON.parse(e.payload).batchId===batch.id);
       const points=readings.filter(r=>r.batchId===batch.id).map(r=>({assetId:r.assetId,kind:r.kind,at:r.at,value:r.value,unit:r.unit})).sort((a,b)=>(a.assetId+a.kind+a.at).localeCompare(b.assetId+b.kind+b.at));
       const digest=sha(JSON.stringify({source:batch.source,class:batch.class,readings:points}));
       if(!signed||JSON.parse(signed.payload).hash!==digest||batch.hash!==digest||points.length!==batch.rows)return {valid:false,count:rows.length,reason:'Telemetry batch differs from signed history: '+batch.id};
     }
-    return {valid:true,count:rows.length,tail:previous,fingerprint:this.fingerprint,scope:'Append-only application API + SQLite triggers + signed hash chain. A host administrator can alter files/keys; pin exported checkpoints externally for independent verification.'};
+    return {valid:true,count:rows.length,tail:previous,fingerprint:this.fingerprint,scope:'Append-only application API + database triggers + signed hash chain. A host/database administrator can alter data/keys; pin exported checkpoints externally for independent verification.'};
+    });
   }
-  checkpoint(){const check=this.verifyAudit();if(!check.valid)fail('Audit integrity failure: '+check.reason,503);const body={version:1,count:check.count,tail:check.tail,at:iso(),fingerprint:this.fingerprint};return {...body,signature:sign(null,Buffer.from(JSON.stringify(body)),this.privateKey).toString('base64')};}
-  anchor(){const checkpoint=this.checkpoint(),target=path.join(this.directory,'anchor.json');writeFileSync(target+'.tmp',JSON.stringify(checkpoint),{mode:0o600});renameSync(target+'.tmp',target);}
-  protect(){const audit=this.verifyAudit();if(!audit.valid)fail('Audit integrity failure; writes disabled.',503);}
-  login(username,password){
-    const row=this.db.prepare('SELECT * FROM users WHERE username=?').get(String(username));
+  async checkpoint(){const check=await this.verifyAudit();if(!check.valid)fail('Audit integrity failure: '+check.reason,503);const body={version:1,count:check.count,tail:check.tail,at:iso(),fingerprint:this.fingerprint};return {...body,signature:sign(null,Buffer.from(JSON.stringify(body)),this.privateKey).toString('base64')};}
+  async anchor(){
+    const checkpoint=await this.checkpoint();
+    if(this.db.kind==='postgres'){
+      await this.db.prepare("INSERT INTO nexus_meta VALUES('checkpoint',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(checkpoint));return;
+    }
+    const target=path.join(this.directory,'anchor.json');writeFileSync(target+'.tmp',JSON.stringify(checkpoint),{mode:0o600});renameSync(target+'.tmp',target);
+  }
+  async protect(){const audit=await this.verifyAudit();if(!audit.valid)fail('Audit integrity failure; writes disabled.',503);}
+  async login(username,password){
+    const row=await this.db.prepare('SELECT * FROM users WHERE username=?').get(String(username));
     const salt=row?.salt??'fixed-dummy-login-salt',candidate=scryptSync(String(password),salt,64),expected=row?Buffer.from(row.password_hash,'hex'):Buffer.alloc(64);
     if(!row||!timingSafeEqual(candidate,expected))fail('Incorrect username or password.',401);
     const sessionToken=token(),csrf=token(),expires=Date.now()+2*3600000;
-    this.transaction(()=>{this.protect();this.db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now());this.db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(sha(sessionToken),row.username,csrf,expires);this.append({username:row.username,role:row.role},'session','login',{});});
+    await this.transaction(async()=>{await this.protect();await this.db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now());await this.db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(sha(sessionToken),row.username,csrf,expires);await this.append({username:row.username,role:row.role},'session','login',{});});
     return {token:sessionToken,user:{username:row.username,role:row.role},csrf,expires};
   }
-  session(value){if(!value||value.length>100)return null;const row=this.db.prepare('SELECT s.*,u.role FROM sessions s JOIN users u ON u.username=s.username WHERE token_hash=? AND expires>?').get(sha(value),Date.now());return row?{user:{username:row.username,role:row.role},csrf:row.csrf,expires:row.expires}:null;}
-  logout(value,actor){this.transaction(()=>{this.protect();this.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha(value));this.append(actor,'session','logout',{});});}
-  allowed(actor,roles){if(!actor||!roles.includes(actor.role))fail('Your role cannot perform this action. Required: '+roles.join(' / '),403);}
-  mutate(id,revision,actor,action,payload,fn){
-    if(!Number.isInteger(revision)||revision<0)fail('A current record revision is required.',409);
-    return this.transaction(()=>{
-      this.protect();const before=this.read(id);if(before.revision!==revision)fail('This record changed in another session. Refresh before retrying.',409);
-      const after=fn(before);after.revision=revision+1;
-      this.db.prepare('UPDATE records SET revision=?,value=? WHERE id=? AND revision=?').run(after.revision,JSON.stringify(after),id,revision);
-      this.append(actor,id,action,{revision:after.revision,payload,state:after});return after;
+  async session(value){if(!value||value.length>100)return null;const row=await this.db.prepare('SELECT s.*,u.role FROM sessions s JOIN users u ON u.username=s.username WHERE token_hash=? AND expires>?').get(sha(value),Date.now());return row?{user:{username:row.username,role:row.role},csrf:row.csrf,expires:Number(row.expires)}:null;}
+  async logout(value,actor){await this.transaction(async()=>{await this.protect();await this.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha(value));await this.append(actor,'session','logout',{});});}
+  async loginAttempt(ip){
+    return this.db.transaction(async()=>{
+      const now=Date.now(),key=sha(String(ip));
+      await this.db.prepare('DELETE FROM login_attempts WHERE at<?').run(now-60000);
+      const prior=await this.db.prepare('SELECT count FROM login_attempts WHERE ip_hash=?').get(key),count=(prior?.count||0)+1;
+      await this.db.prepare('INSERT INTO login_attempts VALUES(?,?,?) ON CONFLICT(ip_hash) DO UPDATE SET count=excluded.count').run(key,now,count);
+      return count<=15;
     });
   }
-  waterAction(scenario,revision,actor,action,payload={},weather=null){
+  async clearLoginAttempts(ip){await this.db.prepare('DELETE FROM login_attempts WHERE ip_hash=?').run(sha(String(ip)));}
+  allowed(actor,roles){if(!actor||!roles.includes(actor.role))fail('Your role cannot perform this action. Required: '+roles.join(' / '),403);}
+  async mutate(id,revision,actor,action,payload,fn){
+    if(!Number.isInteger(revision)||revision<0)fail('A current record revision is required.',409);
+    return this.transaction(async()=>{
+      await this.protect();const before=await this.read(id);if(before.revision!==revision)fail('This record changed in another session. Refresh before retrying.',409);
+      const after=await fn(before);after.revision=revision+1;
+      await this.db.prepare('UPDATE records SET revision=?,value=? WHERE id=? AND revision=?').run(after.revision,JSON.stringify(after),id,revision);
+      await this.append(actor,id,action,{revision:after.revision,payload,state:after});return after;
+    });
+  }
+  async waterAction(scenario,revision,actor,action,payload={},weather=null){
     if(!Object.hasOwn(SCENARIOS,scenario)&&scenario!=='live')fail('Unknown water scenario.');
     const roles={assumptions:['manager'],approve:['manager'],reject:['manager'],cancel:['manager'],reset:['manager'],task:['staff'],fail:['staff'],weigh:['staff'],process:['staff'],book:['resident'],checkin:['resident'],verify:['manager'],'verify-import':['manager'],'live-inputs':['manager'],'site-inputs':['manager']};
     if(!roles[action])fail('Unknown water action.');this.allowed(actor,roles[action]);
-    return this.mutate('water:'+scenario,revision,actor,action,payload,before=>{
+    return this.mutate('water:'+scenario,revision,actor,action,payload,async before=>{
       const previous=before.events.length;
       if(action==='checkin'&&before.collection.owner!==actor.username)fail('Only the booking owner may check in.',403);
       let next;
@@ -124,7 +167,7 @@ export class Store {
         if(scenario!=='live'||before.status!=='PENDING_HUMAN_REVIEW')fail('Supplied readings can only update an unapproved Live outlook plan.');
         if(payload.demo===true){next={...before};delete next.siteInputs;}
         else{
-          const tank=this.telemetry().filter(r=>r.kind==='tank-volume'&&r.assetId==='tank-a'&&r.class!=='simulation').at(-1);
+          const tank=(await this.telemetry()).filter(r=>r.kind==='tank-volume'&&r.assetId==='tank-a'&&r.class!=='simulation').at(-1);
           if(!tank||Date.now()-Date.parse(tank.at)>90*60000)fail('Import / connect a non-synthetic Tank A reading less than 90 minutes old.');
           const q=payload.qualityReference,r=payload.routeReference,at=Date.parse(payload.qualityAt),expires=Date.parse(payload.qualityExpiresAt);
           if(typeof q!=='string'||q.trim().length<3||q.length>200||typeof r!=='string'||r.trim().length<3||r.length>200||!Number.isFinite(at)||!Number.isFinite(expires)||at>Date.now()||expires<=Date.now()||expires<=at||expires-at>7*86400000||payload.reviewed!==true)fail('Review quality and owner/route references with a valid sample time and expiry within seven days.');
@@ -133,7 +176,7 @@ export class Store {
         }
         next.events=[...next.events,{sequence:next.events.length+1,day:next.events.at(-1).day,actor:actor.username,action:'Site input review',detail:payload.demo?'Returned draft to declared demo asset assumptions.':'Captured supplied tank batch '+next.siteInputs.tank.batchId+' with operator-reviewed quality / consent references.'}];
       }
-      else if(action==='verify-import')next=this.reviewWater(before,payload);
+      else if(action==='verify-import')next=await this.reviewWater(before,payload);
       else {
         let current=before;
         if(action==='task'&&payload.task==='transfer'&&before.siteInputs&&Date.parse(before.siteInputs.quality.expiresAt)<=Date.now())fail('The reviewed quality reference expired. Record an interruption and review a new plan before a transfer.');
@@ -143,7 +186,7 @@ export class Store {
           current={...before,liveInputs:structuredClone(weather)};
         }
         if(action==='approve'&&current.siteInputs){
-          const latest=this.telemetry().filter(r=>r.kind==='tank-volume'&&r.assetId==='tank-a'&&r.class!=='simulation').at(-1);
+          const latest=(await this.telemetry()).filter(r=>r.kind==='tank-volume'&&r.assetId==='tank-a'&&r.class!=='simulation').at(-1);
           if(!latest||latest.at!==current.siteInputs.tank.at||latest.value!==current.siteInputs.tank.value)fail('Tank evidence changed. Capture and review the latest supplied inputs before approval.',409);
         }
         if(action==='approve'&&evaluate(current).net<0&&String(payload.note||'').trim().length<10)fail('Explain the budget / non-financial reason for a negative-net plan (10 characters minimum).');
@@ -154,14 +197,14 @@ export class Store {
       next.cycle??=before.cycle??0;
       if(action==='weigh'){
         if(!next.collection.owner)fail('A booking owner is required.');
-        this.db.prepare('INSERT INTO credits VALUES(?,?,?,?,?)').run(`bioloop:${scenario}:${next.cycle}`,next.collection.owner,'water:'+scenario,next.collection.credits,iso());
+        await this.db.prepare('INSERT INTO credits VALUES(?,?,?,?,?)').run(`bioloop:${scenario}:${next.cycle}`,next.collection.owner,'water:'+scenario,next.collection.credits,iso());
       }
       return next;
     });
   }
-  reviewWater(before,payload){
+  async reviewWater(before,payload){
     if(before.status!=='MOBILISED'||!Object.values(before.tasks).every(Boolean))fail('Complete all three work orders before reviewing readings.');
-    const rows=this.telemetry().filter(r=>r.batchId===payload.batchId&&r.kind==='water-use'&&r.assetId==='zone-b');
+    const rows=(await this.telemetry()).filter(r=>r.batchId===payload.batchId&&r.kind==='water-use'&&r.assetId==='zone-b');
     const times=dailyModel(before.scenario,before.liveInputs).map(d=>d.date),byDate=new Map(rows.map(r=>[new Date(Date.parse(r.at)+8*3600000).toISOString().slice(0,10),r]));
     if(rows.length!==14||byDate.size!==14||!times.every(t=>byDate.has(t)))fail('Select a complete 14-day Zone B water-use batch matching this plan window.');
     if(rows.some(r=>r.class==='simulation'))fail('Use the simulation action for synthetic data.');
@@ -169,17 +212,17 @@ export class Store {
     const next=structuredClone(before);next.observation={adjustedBaseline:baseline,potable,total:potable,rain:0,avoided:round(baseline-potable),conservation:null,days:14,class:'user-supplied',batchId:payload.batchId,note:'Provider / user supplied potable meter series compared with model baseline. Rainwater delivery and mulch attribution are not proven.'};
     next.status='EVIDENCE_REVIEWED';next.reservation=0;next.events.push({sequence:next.events.length+1,day:Math.max(14,next.events.at(-1).day),actor:'Operator evidence review',action:'Imported meter batch reviewed',detail:next.observation.note+' Batch '+payload.batchId});return next;
   }
-  energyAction(revision,actor,action,payload={},weather=null){
+  async energyAction(revision,actor,action,payload={},weather=null){
     this.allowed(actor,action==='complete'?['staff']:['manager']);
-    return this.mutate('energy',revision,actor,action,payload,before=>{
+    return this.mutate('energy',revision,actor,action,payload,async before=>{
       if(action==='approve'&&payload.reviewKey!==evaluateEnergy(before,weather).reviewKey)fail('Energy source changed. Refresh public data and review the draft before approval.',409);
-      if(action==='verify-import')payload={...payload,outcome:this.energyOutcome(payload)};
+      if(action==='verify-import')payload={...payload,outcome:await this.energyOutcome(payload)};
       return energyTransition(before,action,payload,actor.username,weather);
     });
   }
-  energyOutcome(payload){
-    const collect=id=>this.telemetry().filter(r=>r.batchId===id&&r.kind==='grid-import'&&r.assetId==='community-hall');
-    const baseline=collect(payload.baselineBatch),post=collect(payload.actualBatch);
+  async energyOutcome(payload){
+    const collect=async id=>(await this.telemetry()).filter(r=>r.batchId===id&&r.kind==='grid-import'&&r.assetId==='community-hall');
+    const baseline=await collect(payload.baselineBatch),post=await collect(payload.actualBatch);
     for(const rows of [baseline,post]){
       if(rows.length<28||rows.length>31||rows.some(r=>r.class==='simulation'))fail('Both batches need 28–31 real/user-supplied daily grid-import readings.');
       const dates=rows.map(r=>new Date(Date.parse(r.at)+8*3600000).toISOString().slice(0,10)).sort();if(new Set(dates).size!==dates.length||dates.some((d,i)=>i&&Date.parse(d)-Date.parse(dates[i-1])!==86400000))fail('Daily billing-cycle readings must be contiguous and unique.');
@@ -187,16 +230,16 @@ export class Store {
     if(payload.baselineBatch===payload.actualBatch||Date.parse(baseline.at(-1).at)>=Date.parse(post[0].at))fail('Baseline must precede the distinct post-intervention cycle.');
     return {baselineKWh:round(baseline.reduce((a,r)=>a+r.value,0)/baseline.length),actualKWh:round(post.reduce((a,r)=>a+r.value,0)/post.length),days:post.length,baselineDays:baseline.length,batchId:payload.baselineBatch+' → '+payload.actualBatch};
   }
-  ridesAction(revision,actor,action,payload={},weather=null,now=Date.now()){
+  async ridesAction(revision,actor,action,payload={},weather=null,now=Date.now()){
     this.allowed(actor,['offer','join','confirm'].includes(action)?['resident']:['manager']);
-    return this.mutate('rides',revision,actor,action,payload,before=>{
+    return this.mutate('rides',revision,actor,action,payload,async before=>{
       if(action==='approve'&&before.trigger==='rain'&&payload.reviewKey!==evaluateRides(before,weather,now).reviewKey)fail('Rain forecast changed. Refresh and review the mission before approval.',409);
       const after=ridesTransition(before,action,payload,actor,weather,now);
-      if(after.trip?.status==='CONFIRMED'&&before.trip?.status!=='CONFIRMED')for(const name of [after.trip.driver,after.trip.passenger])this.db.prepare('INSERT INTO credits VALUES(?,?,?,?,?)').run('ride:'+after.trip.id+':'+name,name,'rides:'+after.trip.id,after.trip.credits,iso());
+      if(after.trip?.status==='CONFIRMED'&&before.trip?.status!=='CONFIRMED')for(const name of [after.trip.driver,after.trip.passenger])await this.db.prepare('INSERT INTO credits VALUES(?,?,?,?,?)').run('ride:'+after.trip.id+':'+name,name,'rides:'+after.trip.id,after.trip.credits,iso());
       return after;
     });
   }
-  ingest(body,actor,{provider=false}={}){
+  async ingest(body,actor,{provider=false}={}){
     this.allowed(actor,provider?['device']:['manager','staff']);
     if(!/^[a-zA-Z0-9_-]{3,80}$/.test(body.batchId)||typeof body.source!=='string'||body.source.trim().length<3||body.source.length>200)fail('Batch ID and a clear source are required.');
     const classification=provider?'provider':body.classification;if(!['provider','user-supplied','simulation'].includes(classification)||(!provider&&classification==='provider'))fail('Choose user-supplied or simulation. Provider class requires the device token.');
@@ -207,20 +250,24 @@ export class Store {
     }
     body={...body,readings:body.readings.map(r=>({assetId:r.assetId,kind:r.kind,at:new Date(r.at).toISOString(),value:r.value,unit:r.unit})).sort((a,b)=>(a.assetId+a.kind+a.at).localeCompare(b.assetId+b.kind+b.at))};
     const digest=sha(JSON.stringify({source:body.source,class:classification,readings:body.readings}));
-    return this.transaction(()=>{
-      this.protect();const existing=this.db.prepare('SELECT hash FROM batches WHERE id=?').get(body.batchId);
+    return this.transaction(async()=>{
+      await this.protect();const existing=await this.db.prepare('SELECT hash FROM batches WHERE id=?').get(body.batchId);
       if(existing){if(existing.hash!==digest)fail('This batch ID already has different content.',409);return {batchId:body.batchId,accepted:0,duplicate:true};}
-      this.db.prepare('INSERT INTO batches VALUES(?,?,?,?,?,?)').run(body.batchId,body.source,classification,iso(),body.readings.length,digest);
+      await this.db.prepare('INSERT INTO batches VALUES(?,?,?,?,?,?)').run(body.batchId,body.source,classification,iso(),body.readings.length,digest);
       const insert=this.db.prepare('INSERT INTO telemetry(batch_id,asset_id,kind,at,value,unit) VALUES(?,?,?,?,?,?)');
-      try{for(const r of body.readings)insert.run(body.batchId,r.assetId,r.kind,r.at,r.value,r.unit);}catch{fail('An asset already has a reading at that source timestamp. Nothing was imported.',409);}
-      this.append(actor,'telemetry','batch-imported',{batchId:body.batchId,source:body.source,class:classification,rows:body.readings.length,hash:digest});return {batchId:body.batchId,accepted:body.readings.length,duplicate:false};
+      try{for(const r of body.readings)await insert.run(body.batchId,r.assetId,r.kind,r.at,r.value,r.unit);}catch{fail('An asset already has a reading at that source timestamp. Nothing was imported.',409);}
+      await this.append(actor,'telemetry','batch-imported',{batchId:body.batchId,source:body.source,class:classification,rows:body.readings.length,hash:digest});return {batchId:body.batchId,accepted:body.readings.length,duplicate:false};
     });
   }
-  telemetry(){return this.db.prepare('SELECT t.asset_id AS assetId,t.kind,t.at,t.value,t.unit,t.batch_id AS batchId,b.class,b.source,b.received_at AS receivedAt FROM telemetry t JOIN batches b ON b.id=t.batch_id ORDER BY t.at,t.id').all();}
-  workspace(actor){
-    const water=Object.fromEntries([...Object.keys(SCENARIOS),'live'].map(k=>[k,this.read('water:'+k)])),readings=this.telemetry();
-    return {water,energy:this.read('energy'),rides:this.read('rides'),readings:readings.slice(-500),readingCount:readings.length,batches:this.db.prepare('SELECT id,source,class,received_at AS receivedAt,rows FROM batches ORDER BY received_at DESC').all().map(b=>({...b,kinds:[...new Set(readings.filter(r=>r.batchId===b.id).map(r=>r.kind))]})),audit:this.verifyAudit(),
-      credits:this.db.prepare('SELECT username,SUM(amount) AS credits FROM credits GROUP BY username').all().filter(r=>['manager','auditor'].includes(actor.role)||r.username===actor.username),anomalies:detectAnomalies(readings)};
+  async telemetry(){return await this.db.prepare('SELECT t.asset_id AS "assetId",t.kind,t.at,t.value,t.unit,t.batch_id AS "batchId",b.class,b.source,b.received_at AS "receivedAt" FROM telemetry t JOIN batches b ON b.id=t.batch_id ORDER BY t.at,t.id').all();}
+  async workspace(actor){
+    return this.db.transaction(async()=>{
+      const water={};for(const scenario of [...Object.keys(SCENARIOS),'live'])water[scenario]=await this.read('water:'+scenario);
+      const readings=await this.telemetry();
+      return {water,energy:await this.read('energy'),rides:await this.read('rides'),readings:readings.slice(-500),readingCount:readings.length,
+        batches:(await this.db.prepare('SELECT id,source,class,received_at AS "receivedAt",rows FROM batches ORDER BY received_at DESC').all()).map(b=>({...b,kinds:[...new Set(readings.filter(r=>r.batchId===b.id).map(r=>r.kind))]})),audit:await this.verifyAudit(),
+        credits:(await this.db.prepare('SELECT username,CAST(SUM(amount) AS INTEGER) AS credits FROM credits GROUP BY username').all()).filter(r=>['manager','auditor'].includes(actor.role)||r.username===actor.username),anomalies:detectAnomalies(readings)};
+    });
   }
-  export(){return {format:'NEXUS-SIGNED-EVIDENCE-1',exportedAt:iso(),publicKey:this.publicKey,checkpoint:this.checkpoint(),events:this.events(),telemetry:this.telemetry(),records:this.db.prepare('SELECT * FROM records ORDER BY id').all().map(r=>({...r,value:JSON.parse(r.value)})),disclosure:'Application-append-only, cryptographically tamper-evident under the pinned signing identity. Not absolute immutability against the machine administrator. Operational examples and synthetic outcomes remain labelled.'};}
+  async export(){return this.db.transaction(async()=>({format:'NEXUS-SIGNED-EVIDENCE-1',exportedAt:iso(),publicKey:this.publicKey,checkpoint:await this.checkpoint(),events:await this.events(),telemetry:await this.telemetry(),records:(await this.db.prepare('SELECT * FROM records ORDER BY id').all()).map(r=>({...r,value:JSON.parse(r.value)})),disclosure:'Application-append-only, cryptographically tamper-evident under the pinned signing identity. Not absolute immutability against the host/database administrator. Operational examples and synthetic outcomes remain labelled.'}));}
 }
