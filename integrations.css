@@ -1,0 +1,53 @@
+.external-services{padding:26px;margin-block:24px;min-width:0}
+.external-services>.ws-section-heading{margin-bottom:12px}
+.external-services h2{font-size:22px;line-height:1.4}
+.external-services h3{font-size:17px;line-height:1.5}
+.external-services p{font-size:16px;line-height:1.8;max-width:76ch;margin-block:12px}
+.external-services a{color:var(--green);text-underline-offset:3px;overflow-wrap:anywhere}
+.service-row{border-top:1px solid var(--line);padding-block:18px}
+.service-row>summary,.service-row-heading{display:flex;justify-content:space-between;gap:16px;align-items:center;font-size:17px;font-weight:600;min-height:40px;cursor:pointer;flex-wrap:wrap}
+.service-row>summary::before{content:'+';color:var(--green);font-size:20px;font-weight:400}
+.service-row[open]>summary::before{content:'−'}
+.service-row>summary>span:first-child{flex:1;min-width:140px}
+.service-row-heading{cursor:default}
+.external-services .service-provenance{font-size:13px;line-height:1.8;color:var(--muted);overflow-wrap:anywhere;max-width:none}
+.external-services .service-caveat{font-size:14px;line-height:1.8;color:var(--amber);background:var(--warning-bg);padding:13px 16px;border-radius:8px;max-width:none}
+.external-services .service-empty{font-size:15px;color:var(--muted);line-height:1.8}
+.external-services .service-intro{font-size:15px;color:var(--muted)}
+.service-advisory{padding-block:17px;border-bottom:1px solid var(--line)}
+.service-advisory>summary{font-size:16px;font-weight:600;line-height:1.8;cursor:pointer;overflow-wrap:anywhere}
+.service-advisory .ws-badge{margin-right:9px}
+.service-advisory>p{white-space:pre-line;overflow-wrap:anywhere}
+.service-chart{margin-block:18px;min-width:0}
+.service-chart svg{width:100%;height:auto;display:block;max-height:250px;overflow:visible}
+.service-axis{fill:none;stroke:var(--line);stroke-width:1}
+.service-line{fill:none;stroke:var(--green);stroke-width:2.5;stroke-linejoin:round}
+.service-point{fill:var(--forest);stroke:var(--line);stroke-width:2}
+.service-chart text{font-family:inherit;font-size:11px;fill:var(--muted)}
+.external-services label{display:grid;gap:8px;font-size:14px;font-weight:600;line-height:1.7;margin-top:16px;max-width:480px}
+.external-services select{font:inherit;font-size:16px;min-height:44px;padding:10px 12px;background:var(--surface-soft);border:1px solid var(--line);border-radius:7px;color:var(--ink);width:100%;min-width:0}
+.external-services select:focus-visible,.external-services summary:focus-visible,.external-services a:focus-visible{outline:2px solid var(--water);outline-offset:4px}
+.external-services .service-selection{font-size:16px;font-variant-numeric:tabular-nums;margin-top:10px}
+.service-setup{padding-block:20px;border-top:1px solid var(--line)}
+.service-setup>summary{font-size:16px;font-weight:600;cursor:pointer;line-height:1.8}
+.service-setup pre{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.9;font-size:13px;padding:16px;border-radius:8px;background:var(--surface-soft);user-select:all}
+.service-export-row{display:flex;align-items:center;gap:22px;flex-wrap:wrap;padding-top:15px;border-top:1px solid var(--line)}
+.service-export-row>span{font-size:12px;line-height:1.9;color:var(--muted);max-width:80ch}
+.service-forecast{list-style:none;padding:0;display:grid;gap:12px;margin-top:18px}
+.service-forecast>li{display:grid;grid-template-columns:130px minmax(0,1fr);gap:14px;font-size:14px;line-height:1.8}
+.provider-route{width:100%;max-height:300px;display:block;margin-top:18px;background:var(--surface-soft);border-radius:10px}
+.provider-route polyline{fill:none;stroke:var(--green);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.provider-route circle{fill:var(--forest);stroke:white;stroke-width:2}
+.provider-route text{font-family:inherit;font-size:12px;fill:var(--forest)}
+.route-provider-values{display:flex;gap:24px;align-items:baseline;flex-wrap:wrap;font-variant-numeric:tabular-nums;margin-block:18px}
+.route-provider-values strong{font-size:26px;font-weight:600}.route-provider-values span{font-size:16px;color:var(--muted)}
+.ws-main-stack>.external-services{margin:0}
+@media(max-width:760px){.external-services{padding:22px 18px}.external-services h2{font-size:21px}.service-row>summary{font-size:16px;gap:10px}.service-row>summary>.ws-badge{margin-left:24px}.service-forecast>li{grid-template-columns:1fr;gap:2px}.service-chart text{font-size:28px}.service-chart svg{min-height:130px}.service-export-row{gap:10px}.external-services .service-caveat{font-size:14px}}
+
+/* Public sources remain distinguishable from site evidence in the light interface. */
+.external-services{padding:24px 0 0;margin:32px 0;border-top:1px solid var(--line);background:transparent;border-radius:0}.external-services>.ws-section-heading{margin-bottom:16px}.external-services h2{font-size:21px;font-weight:600}.external-services h3{font-size:16px;font-weight:500}.external-services p{font-size:14px;line-height:1.8;max-width:76ch;margin-block:12px}.external-services a{color:var(--forest)}.service-row{padding-block:20px}.service-row>summary,.service-row-heading{font-size:15px;font-weight:500;min-height:40px;gap:16px}.service-row>summary::before{color:var(--green);font-weight:400;font-size:18px}.service-row>summary:hover{color:var(--forest)}.service-row[open]>summary{margin-bottom:16px;color:var(--forest)}.external-services .service-provenance{font-size:12px;color:var(--muted);line-height:1.8}.external-services .service-caveat{font-size:13px;line-height:1.8;background:var(--warning-bg);color:#886222;padding:12px 16px;border-radius:6px}.external-services .service-empty,.external-services .service-intro{font-size:14px}.service-advisory{padding-block:20px}.service-advisory>summary{font-size:14px;font-weight:500}.service-chart{margin-block:24px}.service-chart svg{max-height:240px}.service-axis{stroke:#BCC7BA}.service-line{stroke:var(--water);stroke-width:2.5}.service-point{fill:var(--water);stroke:var(--surface);stroke-width:2.5}.service-chart text{font-family:'General Sans','Segoe UI',sans-serif;font-size:12px;fill:var(--muted)}
+.external-services label{font-size:13px;font-weight:500;gap:8px}.external-services select{background:var(--surface);color:var(--ink);border:1px solid var(--control-border);border-radius:6px;font-size:14px;min-height:44px}.external-services select:focus-visible,.external-services summary:focus-visible,.external-services a:focus-visible{outline:2px solid var(--green);outline-offset:4px}.external-services .service-selection{font-size:14px;color:var(--muted)}.service-selection strong{font-weight:500;color:var(--ink)}.service-setup>summary{font-size:14px;font-weight:500;color:var(--forest)}.service-setup pre{font-size:12px;background:var(--surface-soft);color:var(--ink);border:0;border-radius:6px;padding:16px;line-height:1.9}.service-export-row{gap:24px}.service-export-row>span{font-size:11px;color:var(--muted);line-height:1.8}.service-forecast>li{font-size:13px;padding-bottom:12px;border-bottom:1px solid var(--line)}.provider-route{background:var(--surface-soft);border:0;border-radius:7px;max-height:310px}.provider-route polyline{stroke:var(--green);stroke-width:2.5}.provider-route circle{fill:var(--green);stroke:var(--surface)}.provider-route text{font-family:'General Sans','Segoe UI',sans-serif;fill:var(--ink);font-size:13px}.route-provider-values{gap:24px;margin-block:20px}.route-provider-values strong{font-size:32px;font-weight:500;color:var(--ink);letter-spacing:-.035em}.route-provider-values span{font-size:14px}
+@media(max-width:760px){.external-services{padding:24px 0 0;margin-block:24px}.external-services h2{font-size:20px}.external-services p{font-size:14px;line-height:1.8}.service-row>summary{font-size:14px;gap:10px;line-height:1.7}.service-row>summary>.ws-badge{margin-left:24px}.external-services .service-provenance{font-size:12px}.external-services .service-caveat{font-size:13px}.external-services select{font-size:16px;min-height:44px}.external-services label{font-size:13px}.external-services .service-selection{font-size:14px}.service-chart text{font-size:27px}.service-chart svg{min-height:130px}.service-forecast>li{grid-template-columns:1fr;gap:4px;font-size:13px}.service-setup>summary{font-size:14px}.service-setup pre{font-size:12px}.service-export-row{gap:12px}.service-export-row>span{font-size:11px}.route-provider-values strong{font-size:30px}.route-provider-values span{font-size:13px}}
+
+
+.server-login+.external-services{border-top:0;padding-top:0}

@@ -6,10 +6,14 @@ import {Store} from './store.mjs';
 import {createApi} from './api.mjs';
 import { normaliseForecast, WEATHER_URL } from './weather.js';
 import {normaliseLiveWeather, LIVE_WEATHER_URL, isLiveFresh} from './live.js';
+import {createServices} from './services.mjs';
 const root=fileURLToPath(new URL('./',import.meta.url));
+try{process.loadEnvFile(path.join(root,'.env'));}catch(error){if(error.code!=='ENOENT')throw error;}
 const port=Number(process.env.PORT||5173);
-const allowed=new Set(['/evidence.js','/platform.js','/workspace-ui.js','/workspace.css','/samples/telemetry-template.csv','/samples/synthetic-water-week.csv','/live.css','/motion.js','/live.js','/index.html','/app.js','/engine.js','/data.js','/style.css','/assets/nexus-mark.svg','/assets/nexus-logo.svg','/assets/nexus-logo-light.svg','/assets/manrope.ttf','/assets/FONT-LICENSE.txt','/data/climate-july-2025.json','/data/metmalaysia-snapshot.json']);
-const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.ttf':'font/ttf','.json':'application/json','.txt':'text/plain','.csv':'text/csv'};
+const allowed=new Set(['/integrations-ui.js','/integrations.css','/evidence.js','/platform.js','/workspace-ui.js','/workspace.css','/samples/telemetry-template.csv','/samples/synthetic-water-week.csv','/live.css','/motion.js','/live.js','/index.html','/app.js','/engine.js','/data.js','/style.css','/assets/nexus-mark.svg','/assets/nexus-logo.svg','/assets/nexus-logo-light.svg','/assets/manrope.ttf','/assets/FONT-LICENSE.txt','/data/climate-july-2025.json','/data/metmalaysia-snapshot.json']);
+allowed.add("/assets/instrument-serif.ttf");
+allowed.add("/assets/general-sans.woff2");
+const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.ttf':'font/ttf','.woff2':'font/woff2','.json':'application/json','.txt':'text/plain','.csv':'text/csv'};
 let cache=null,inFlight=null;
 async function forecast(){
   if(cache&&Date.now()-cache.cachedAt<600000)return cache.payload;
@@ -46,7 +50,7 @@ async function liveForecast(){
 }
 
 const store=new Store(process.env.NEXUS_DATA_DIR||path.join(root,'.nexus'));
-const api=createApi(store,{getWeather:liveForecast});
+const api=createApi(store,{getWeather:liveForecast,services:createServices()});
 const server=http.createServer(async(req,res)=>{
   try{
     if(!['localhost:'+port,'127.0.0.1:'+port].includes(req.headers.host)){res.writeHead(403);res.end('Local host required');return;}

@@ -149,6 +149,8 @@ vite.config.ts.timestamp-*
 .turbo
 
 # Private NEXUS database, credentials and signing identity
+# General Sans may be self-hosted for this app, but not redistributed in a repository.
+assets/general-sans.woff2
 .nexus/
 *.sqlite
 *.sqlite-wal
