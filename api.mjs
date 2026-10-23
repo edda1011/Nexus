@@ -8,15 +8,22 @@ async function readBody(req){
   let bytes=0,parts=[];for await(const chunk of req){bytes+=chunk.length;if(bytes>512000)reject('Request too large.',413);parts.push(chunk);}
   try{const value=JSON.parse(Buffer.concat(parts).toString());if(!value||typeof value!=='object'||Array.isArray(value))throw new Error();return value;}catch{reject('Invalid JSON object.');}
 }
-export function createApi(store,{getWeather}){
+export function createApi(store,{getWeather,services=null}){
   const attempts=new Map();
   return async(req,res,url)=>{
-    if(!['/api/session','/api/login','/api/logout','/api/workspace','/api/water/action','/api/energy/action','/api/rides/action','/api/telemetry','/api/evidence','/api/integrity'].includes(url.pathname))return false;
+    const service=url.pathname.match(/^\/api\/services\/(status|warnings|electricity|flood|thingspeak|route)$/)?.[1];
+    if(!service&&!['/api/session','/api/login','/api/logout','/api/workspace','/api/water/action','/api/energy/action','/api/rides/action','/api/telemetry','/api/evidence','/api/integrity'].includes(url.pathname))return false;
     try{
       if(!['GET','POST'].includes(req.method))reject('Method not allowed.',405);
       if(req.headers.origin&&req.headers.origin!=='http://'+req.headers.host)reject('Cross-origin requests are not accepted.',403);
       const session=store.session(cookie(req));
-      if(url.pathname==='/api/session'&&req.method==='GET'){send(res,200,{user:session?.user??null,csrf:session?.csrf??null,expires:session?.expires??null,accounts:ACCOUNT_ROLES,version:'0.5.0',inputKinds:INPUT_KINDS});return true;}
+      if(service){
+        if(req.method!=='GET')reject('Method not allowed.',405);
+        if(!services)reject('External services are unavailable.',503);
+        if(service==='thingspeak'&&services.privateThingSpeak){if(!session)reject('Sign in as manager, staff or auditor to read the private ThingSpeak channel.',401);store.allowed(session.user,['manager','staff','auditor']);}
+        const result=await services.get(service,url.searchParams.get('corridor')||'school');send(res,result.status==='invalid'?400:200,result);return true;
+      }
+      if(url.pathname==='/api/session'&&req.method==='GET'){send(res,200,{user:session?.user??null,csrf:session?.csrf??null,expires:session?.expires??null,accounts:ACCOUNT_ROLES,version:'0.6.0',inputKinds:INPUT_KINDS});return true;}
       if(url.pathname==='/api/login'&&req.method==='POST'){
         const now=Date.now(),ip=req.socket.remoteAddress,prior=attempts.get(ip)||{at:now,count:0};if(now-prior.at>60000){prior.at=now;prior.count=0;}prior.count++;attempts.set(ip,prior);
         if(prior.count>15)reject('Too many sign-in attempts. Wait one minute.',429);

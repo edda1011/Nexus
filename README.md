@@ -1,4 +1,4 @@
-# NEXUS Studio · v0.5
+# NEXUS Studio · v0.6
 
 Resource intelligence. Connected action.
 
@@ -82,6 +82,20 @@ npm.cmd test
 
 `engine.js`/`platform.js` own deterministic models and transitions; `evidence.js` evidence; `store.mjs` transactions/accounts/signatures; `api.mjs` routes; `workspace-ui.js` new module views alongside `app.js`. No build step or dependencies.
 
-See `REQUIREMENTS.md`, `PILOT.md` and `PITCH.md` for traceability, judging, governance, commercial assumptions, slide-ready content and a three-minute script. The organiser's actual slide template has not been populated. No physical devices, measured outcomes, interviews, field permissions or team biographies are invented.
+See `PILOT.md` for the real-world validation and governance plan. No physical devices, measured outcomes, interviews, field permissions or team biographies are invented.
 
 Source logos stay in `assets/`; locally bundled Manrope retains its SIL Open Font License. References: [Open-Meteo/ERA5](https://open-meteo.com/en/docs/historical-weather-api), [MET](https://developer.data.gov.my/realtime-api/weather), [Air Selangor tariff](https://content.airselangor.com/cmi-prod-blobstorageanon-001-sea/media/uigh3doj/appendix-b.pdf), [FAO efficiency](https://www.fao.org/4/t7202e/t7202e08.htm).
+
+## Free external services in v0.6
+
+Connections & audit now includes an External data services panel. Water Overview adds official advisories and a 14-day GloFAS river-discharge model for a grid near Shah Alam. Energy includes national monthly electricity statistics; RideShare includes a configurable road route explorer. Charts let you inspect individual source points and export a source receipt.
+
+Open-Meteo weather/irradiance and MET district forecasts remain connected. Official advisories, national electricity and the river model need no key. These sources keep their own scope and dates: national statistics are not this building’s meter, river flow is not tank stock or a street-flood alert, and advisory text must be read for the actual affected area. These references do not automatically change approved plans, issue dispatch or certify safe conditions.
+
+For routing and ThingSpeak, copy `.env.example` to `.env` only if `.env` does not already exist; otherwise merge the required variables into the existing file. Set `NEXUS_ORS_API_KEY` from a free HeiGIT Standard account and your school/office start/end points in longitude,latitude order. Set `NEXUS_THINGSPEAK_CHANNEL_ID`, field number and actual unit; add a read key only for a private channel. Restart the server after changes. The browser shows Setup needed until configuration is supplied. Keys never appear in the browser or source receipts, and `.env` stays ignored by Git.
+
+ThingSpeak is a read-only reference stream, not an automatic import into Tank A or the impact ledger. You must independently establish its field/unit/instrument association. A private channel is readable only by signed-in manager, staff or auditor; logging out clears it from the browser view. Calculated road routes stay separate from assumed mission distances and demo rewards and are not live congestion or GPS proof.
+
+The backend uses fixed provider hosts, an eight-second request timeout, response-size limits, shared in-flight requests and caches: advisories 5 minutes, electricity 24 hours, river model 1 hour, ThingSpeak 1 minute and routes 1 hour. Failed checks preserve the previous successful retrieval as Last known, with a one-minute backoff. The visible client checks connections every five minutes; caching is not a claim that a provider updated its data.
+
+Providers and attribution: [MET/data.gov.my](https://developer.data.gov.my/realtime-api/weather), [electricity dataset](https://data.gov.my/data-catalogue/electricity_consumption), [Open-Meteo/GloFAS](https://open-meteo.com/en/docs/flood-api), [HeiGIT](https://account.heigit.org/), [ThingSpeak](https://www.mathworks.com/help/thingspeak/readdata.html). Open-Meteo free access is for non-commercial evaluation/prototyping; retain source attribution and respect each provider’s free-tier limits.

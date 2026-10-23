@@ -28,3 +28,21 @@ test('HTTP sessions, CSRF, roles, device provenance and signed export enforce tr
  const evidence=await (await call('/api/evidence',null,headers)).json();assert.ok(evidence.publicKey);assert.ok(evidence.checkpoint.signature);assert.ok(!JSON.stringify(evidence).includes(store.bootstrap.deviceToken));assert.ok(!JSON.stringify(evidence).includes(session.csrf));
  assert.equal((await call('/api/logout',{},headers)).status,200);assert.equal((await call('/api/workspace',null,headers)).status,401);
 });
+
+test('external service endpoints enforce methods, origin and private ThingSpeak role boundaries',async t=>{
+ const store=new Store(mkdtempSync(path.join(tmpdir(),'nexus-services-http-')),{testPassword:'test-only-long-password'}),calls=[];
+ const services={privateThingSpeak:true,get:async(id,corridor)=>{calls.push({id,corridor});return {id,status:'available',data:{source:'test provider'}};}};
+ const api=createApi(store,{getWeather:async()=>null,services});
+ const server=http.createServer(async(req,res)=>{if(!await api(req,res,new URL(req.url,'http://localhost'))){res.writeHead(404);res.end();}});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));store.close();});
+ const base='http://127.0.0.1:'+server.address().port;
+ assert.equal((await fetch(base+'/api/services/flood')).status,200);
+ assert.equal((await fetch(base+'/api/services/flood',{method:'POST'})).status,405);
+ assert.equal((await fetch(base+'/api/services/warnings',{headers:{Origin:'https://untrusted.example'}})).status,403);
+ assert.equal((await fetch(base+'/api/services/thingspeak')).status,401);
+ for(const [username,status] of [['rider',403],['manager',200],['auditor',200]]){
+  const login=await fetch(base+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password:'test-only-long-password'})});
+  const cookie=login.headers.get('set-cookie').split(';')[0];assert.equal((await fetch(base+'/api/services/thingspeak',{headers:{Cookie:cookie}})).status,status);
+ }
+ assert.equal(calls.filter(r=>r.id==='thingspeak').length,2);
+});

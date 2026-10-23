@@ -1,4 +1,4 @@
-# NEXUS local API · v0.5
+# NEXUS local API · v0.6
 
 Local prototype only, Node 24+, loopback binding. JSON bodies up to 512 KB; no cross-origin access. Credentials, device token and private signing key live in ignored `.nexus/`. Do not put them in source, screenshots or a public demo. Source labels describe provenance, not independent truth.
 
@@ -75,3 +75,20 @@ RideShare: a distinct resident offers, another joins; both attest the same trip 
 ## Offline verification
 
 Export in Connections, then `node verify-evidence.mjs exported.json PINNED_FINGERPRINT`. Verification checks Ed25519 signatures, links/sequence, signed checkpoint, revisioned record snapshots and telemetry batch digests. Keep the initial public-key fingerprint/checkpoint outside this machine. Host administrator control of the private key remains outside the guarantee. For production, replace local bootstrap accounts and shared gateway token with managed identities, scoped per-device credentials, HTTPS, rotation and durable external checkpoints.
+
+## External service endpoints
+
+GET-only same-origin routes, mounted before the authenticated operational actions:
+
+| Route | Content | Access |
+| --- | --- | --- |
+| `/api/services/status` | Configuration flags and attribution, no keys | Public local client |
+| `/api/services/warnings` | MET national advisory text with issue/validity times in MYT | Public local client |
+| `/api/services/electricity` | Latest 24 available national total-sector monthly rows, million kWh/month | Public local client |
+| `/api/services/flood` | 14 UTC model days of river discharge in m³/s for grid near Shah Alam | Public local client |
+| `/api/services/route?corridor=school` | Configured school or office driving-car geometry, distance and duration | Public local client; server key required |
+| `/api/services/thingspeak` | Selected channel field with original timestamps and declared unit | Public for a public channel; manager/staff/auditor for configured private read key |
+
+Attempted source retrievals return `status` (`available`, `stale`, `unavailable`), `data`, original successful `fetchedAt`, latest `checkedAt`, and an actionable message where applicable. Setup responses use `not_configured` with a message, without retrieval timestamps; `/status` returns configuration flags rather than this envelope. Empty official warnings are valid; malformed provider records are rejected and the river model must declare m³/s. River nulls remain null. ThingSpeak empty/non-numeric fields are not zero; an undeclared unit is shown as `unit not configured` and requires independent review. An unavailable first retrieval contains no invented dataset. No client-provided URL can be fetched. Redirects are rejected; government URLs use their canonical trailing slash. Unknown corridors return HTTP 400 with `status: "invalid"`.
+
+Configuration is loaded once at startup from the local `.env` file. The allowlisted static server does not serve `.env`, `.env.example`, backend modules or `.nexus`. `NEXUS_ORS_API_KEY` and `NEXUS_THINGSPEAK_READ_KEY` remain server-side. See `.env.example` for all variables. Routing targets the current `https://api.heigit.org/openrouteservice/v2/directions/driving-car/geojson` endpoint. No automatic site-data import, mission-distance rewrite or reward recalculation is performed from these reference feeds.

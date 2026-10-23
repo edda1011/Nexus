@@ -1,6 +1,6 @@
 {
   "name": "nexus-township",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "description": "NEXUS township orchestration: water, BioLoop, energy and RideShare with signed server audit",

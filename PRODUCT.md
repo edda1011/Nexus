@@ -28,3 +28,6 @@ Readable operational hierarchy and native controls. Purposeful immediate action 
 
 ## Identity and interaction
 Forest rail/pale botanical workspace, local Manrope, original interlocking N SVG. Identity page removed at user request. Ordinary prose 16px, compact metadata 12–14px, larger headings. Map/action/wallet motion and interactive chart/form controls explain state. Desktop module links become a native selector on mobile; original four Water navigation destinations remain available.
+
+## External source extension
+V0.6 adds current official advisory retrieval, national monthly electricity history, a 14-day UTC GloFAS river-discharge model, configurable HeiGIT road routes and a configured ThingSpeak field reference stream. Their time, location and data class stay visible. They do not silently become site stock, building meter outcomes, local flood safety, live traffic or GPS verification. Optional credentials stay in ignored .env; a private ThingSpeak channel requires authorised server roles. No user-deleted design, requirements, pitch or surface Markdown file is recreated.
