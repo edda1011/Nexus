@@ -19,5 +19,6 @@
   },
   "dependencies": {
     "pg": "8.23.1"
-  }
+  },
+  "main": "server.mjs"
 }

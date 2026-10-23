@@ -30,7 +30,7 @@ This prints the different random passwords generated at first startup. Sign in t
 
 ## Deploy to Vercel with Neon
 
-The same application can use Neon Postgres instead of local SQLite. Calculations, role permissions, workflows and API routes remain the same. Do not deploy a local SQLite database to a serverless filesystem.
+The same application can use Neon Postgres instead of local SQLite. Browser startup lives in `nexus-client.js`, separate from the `server.mjs` Node entrypoint: Vercel checks conventional root names such as `app.js` before `server.mjs`, so do not rename the browser module back to `app.js`. Calculations, role permissions, workflows and API routes remain the same. Do not deploy a local SQLite database to a serverless filesystem.
 
 1. Create a Neon Postgres project near the application (Singapore), then privately add the pooled `postgresql://…` connection string as `DATABASE_URL` in local `.env`.
 2. Stop the old local server before migration. Run `npm.cmd run db:setup`. This verifies and copies existing local accounts/password hashes, records, telemetry, credits and the signed audit into an empty database in one transaction. It retains the original SQLite files. Local browser sessions are deliberately not copied; sign in again. Re-running setup on the same identity retains the existing cloud data; it does not resynchronise later local changes or overwrite a different identity.
@@ -95,7 +95,7 @@ Server binds loopback only; do not expose publicly as-is. Sessions expire after 
 npm.cmd test
 ```
 
-`engine.js`/`platform.js` own deterministic models and transitions; `evidence.js` evidence; `store.mjs` transactions/accounts/signatures; `api.mjs` routes; `workspace-ui.js` new module views alongside `app.js`. No build step or dependencies.
+`engine.js`/`platform.js` own deterministic models and transitions; `evidence.js` evidence; `store.mjs` transactions/accounts/signatures; `api.mjs` routes; `workspace-ui.js` new module views alongside `nexus-client.js`. The backend entrypoint is `server.mjs`; `pg` supplies Postgres connectivity and the deployment build prepares public assets.
 
 See `PILOT.md` for the real-world validation and governance plan. No physical devices, measured outcomes, interviews, field permissions or team biographies are invented.
 
